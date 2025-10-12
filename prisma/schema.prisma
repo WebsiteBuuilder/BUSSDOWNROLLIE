@@ -1,0 +1,95 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    Int              @id @default(autoincrement())
+  discordId             String           @unique
+  vp                    Int              @default(0)
+  lastDailyAt           DateTime?
+  streakDays            Int              @default(0)
+  blacklisted           Boolean          @default(false)
+  createdAt             DateTime         @default(now())
+  
+  // Relations
+  vouches               Vouch[]
+  transfersFrom         Transfer[]       @relation("FromUser")
+  transfersTo           Transfer[]       @relation("ToUser")
+  redemptions           Redemption[]
+  battlesAsChallenger   Battle[]         @relation("Challenger")
+  battlesAsOpponent     Battle[]         @relation("Opponent")
+  blackjackRounds       BlackjackRound[]
+}
+
+model Vouch {
+  id                    Int      @id @default(autoincrement())
+  messageId             String   @unique
+  userId                Int
+  user                  User     @relation(fields: [userId], references: [id])
+  imageUrl              String
+  createdAt             DateTime @default(now())
+  providerMentioned     Boolean
+  status                String   // 'auto', 'approved', 'rejected', 'pending'
+  approvedByProviderId  String?
+}
+
+model Transfer {
+  id         Int      @id @default(autoincrement())
+  fromUserId Int
+  fromUser   User     @relation("FromUser", fields: [fromUserId], references: [id])
+  toUserId   Int
+  toUser     User     @relation("ToUser", fields: [toUserId], references: [id])
+  amount     Int
+  fee        Int
+  createdAt  DateTime @default(now())
+}
+
+model Redemption {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  user            User     @relation(fields: [userId], references: [id])
+  type            String   // '5USD' or 'FREE_ORDER'
+  cost            Int
+  ticketChannelId String?
+  status          String   // 'opened', 'fulfilled', 'canceled'
+  createdAt       DateTime @default(now())
+}
+
+model Battle {
+  id           Int       @id @default(autoincrement())
+  challengerId Int
+  challenger   User      @relation("Challenger", fields: [challengerId], references: [id])
+  opponentId   Int
+  opponent     User      @relation("Opponent", fields: [opponentId], references: [id])
+  game         String    // 'rps', 'highcard', 'dice', 'hilow', 'reaction'
+  amount       Int
+  winnerId     Int?
+  status       String    // 'open', 'accepted', 'resolved', 'canceled'
+  state        String?   // JSON for game state
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+}
+
+model BlackjackRound {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  amount    Int
+  state     String    // JSON: hands, deck, etc.
+  result    String?   // 'win', 'lose', 'push'
+  createdAt DateTime  @default(now())
+}
+
+model Config {
+  key   String @id
+  value String
+}
+

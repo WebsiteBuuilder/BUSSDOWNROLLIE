@@ -1,0 +1,37 @@
+{
+  "name": "guhd-eats-bot",
+  "version": "1.0.0",
+  "description": "GUHD EATS Discord bot with VP economy system",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "test": "vitest run --config vitest.config.js",
+    "test:watch": "vitest --config vitest.config.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "seed": "node scripts/seed.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "economy",
+    "vouch"
+  ],
+  "author": "GUHD EATS",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^6.17.1",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "prisma": "^6.17.1",
+    "vitest": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
