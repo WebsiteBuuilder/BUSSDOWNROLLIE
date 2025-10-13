@@ -27,32 +27,69 @@ export function parseMessageLink(link) {
   };
 }
 
-/**
- * Check if message has image attachments
- */
-export function hasImageAttachment(message) {
-  if (!message.attachments || message.attachments.size === 0) {
-    return false;
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+
+function normalizeAttachments(attachments) {
+  if (!attachments) {
+    return [];
   }
 
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-  return message.attachments.some(attachment => {
-    const ext = attachment.name?.toLowerCase().split('.').pop();
-    return imageExtensions.includes(ext) || attachment.contentType?.startsWith('image/');
-  });
+  if (Array.isArray(attachments)) {
+    return attachments;
+  }
+
+  if (typeof attachments.values === 'function') {
+    return Array.from(attachments.values());
+  }
+
+  return Array.from(attachments);
+}
+
+function isImageAttachment(attachment) {
+  const ext = attachment.name?.toLowerCase().split('.').pop();
+  return IMAGE_EXTENSIONS.includes(ext) || attachment.contentType?.startsWith('image/');
+}
+
+function getEmbedImageUrl(embed) {
+  if (!embed) return null;
+
+  return embed.image?.url || embed.thumbnail?.url || null;
+}
+
+/**
+ * Check if message has image attachments or embeds
+ */
+export function hasImageAttachment(message) {
+  const attachments = normalizeAttachments(message.attachments);
+  if (attachments.some(isImageAttachment)) {
+    return true;
+  }
+
+  if (Array.isArray(message.embeds)) {
+    return message.embeds.some(embed => Boolean(getEmbedImageUrl(embed)));
+  }
+
+  return false;
 }
 
 /**
  * Get first image URL from message
  */
 export function getFirstImageUrl(message) {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-  const imageAttachment = message.attachments.find(attachment => {
-    const ext = attachment.name?.toLowerCase().split('.').pop();
-    return imageExtensions.includes(ext) || attachment.contentType?.startsWith('image/');
-  });
-  
-  return imageAttachment?.url || null;
+  const attachments = normalizeAttachments(message.attachments);
+  const imageAttachment = attachments.find(isImageAttachment);
+  if (imageAttachment?.url) {
+    return imageAttachment.url;
+  }
+
+  if (Array.isArray(message.embeds)) {
+    const embedWithImage = message.embeds.find(embed => Boolean(getEmbedImageUrl(embed)));
+    if (embedWithImage) {
+      return getEmbedImageUrl(embedWithImage);
+    }
+  }
+
+  return null;
 }
 
 /**
