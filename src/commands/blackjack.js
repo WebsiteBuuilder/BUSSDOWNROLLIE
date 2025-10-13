@@ -230,13 +230,13 @@ async function showGameUI(interaction, round, gameState, user) {
   });
 }
 
-// Handle button interactions
-client.on('interactionCreate', async (interaction) => {
+export async function handleBlackjackInteraction(interaction) {
   if (!interaction.isButton()) return;
 
-  if (!interaction.customId.startsWith('bj_')) return;
+  const customId = interaction.customId ?? '';
+  if (!customId.startsWith('bj_')) return;
 
-  const parts = interaction.customId.split('_');
+  const parts = customId.split('_');
   const action = parts[1];
   const roundId = parseInt(parts[2]);
 
@@ -276,7 +276,7 @@ client.on('interactionCreate', async (interaction) => {
     switch (action) {
       case 'hit':
         gameState = hit(gameState);
-        
+
         // Check for bust
         if (isBust(gameState.playerHand)) {
           await resolveGame(interaction, round, gameState, round.user);
@@ -305,7 +305,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         gameState = doubleDown(gameState);
-        
+
         // Deduct additional bet
         await prisma.user.update({
           where: { id: round.user.id },
@@ -323,7 +323,7 @@ client.on('interactionCreate', async (interaction) => {
       ephemeral: true
     });
   }
-});
+}
 
 async function resolveGame(interaction, round, gameState, user) {
   // Play dealer's hand
