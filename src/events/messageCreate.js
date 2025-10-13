@@ -39,8 +39,15 @@ export async function execute(message) {
       return; // Silently ignore duplicate
     }
 
-    // Check if provider was mentioned
-    const providerMentioned = mentionsRole(message, process.env.PROVIDER_ROLE_ID);
+    const providerRoleId = process.env.PROVIDER_ROLE_ID;
+
+    // Check if provider role or a member with the provider role was mentioned
+    const providerMentioned = providerRoleId
+      ? (
+        mentionsRole(message, providerRoleId) ||
+        message.mentions.members?.some(member => member.roles.cache.has(providerRoleId))
+      )
+      : false;
     const imageUrl = getFirstImageUrl(message);
 
     if (providerMentioned) {
