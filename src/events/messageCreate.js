@@ -45,14 +45,12 @@ export async function execute(message) {
 
     if (providerMentioned) {
       // Auto-approve and credit VP
-      await prisma.$transaction(async (tx) => {
-        // Update user VP
-        await tx.user.update({
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const incrementedUser = await tx.user.update({
           where: { id: user.id },
           data: { vp: { increment: 1 } }
         });
 
-        // Create vouch record
         await tx.vouch.create({
           data: {
             messageId: message.id,
@@ -62,6 +60,8 @@ export async function execute(message) {
             status: 'auto'
           }
         });
+
+        return incrementedUser;
       });
 
       // DM user confirmation
@@ -72,7 +72,7 @@ export async function execute(message) {
             title: '✅ Vouch Approved!',
             description: 'Thanks for the vouch! +1 VP',
             fields: [
-              { name: 'New Balance', value: `${user.vp + 1} VP 💰`, inline: true }
+              { name: 'New Balance', value: `${updatedUser.vp} VP 💰`, inline: true }
             ],
             timestamp: new Date().toISOString()
           }]
@@ -103,6 +103,12 @@ export async function execute(message) {
           status: 'pending'
         }
       });
+
+      try {
+        await message.react('⏳');
+      } catch (error) {
+        console.log('Could not react to pending vouch:', error.message);
+      }
 
       // Reply with instruction
       await message.reply({

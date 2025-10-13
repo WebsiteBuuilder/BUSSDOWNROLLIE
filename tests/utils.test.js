@@ -6,7 +6,9 @@ import {
   calculateBattleRake,
   randomInt,
   getMedalEmoji,
-  exportToCSV
+  exportToCSV,
+  hasImageAttachment,
+  getFirstImageUrl
 } from '../src/lib/utils.js';
 
 describe('Utility Functions', () => {
@@ -98,10 +100,55 @@ describe('Utility Functions', () => {
       ];
 
       const csv = exportToCSV(users);
-      
+
       expect(csv).toContain('Discord ID,VP Balance,Streak Days,Blacklisted,Created At');
       expect(csv).toContain('123,100,5,false');
       expect(csv).toContain('456,50,0,true');
+    });
+  });
+
+  describe('image helpers', () => {
+    const createAttachmentCollection = (items) => ({
+      size: items.length,
+      some: (fn) => items.some(fn),
+      find: (fn) => items.find(fn),
+      values: () => items[Symbol.iterator](),
+      [Symbol.iterator]: function* () {
+        for (const item of items) {
+          yield item;
+        }
+      }
+    });
+
+    it('detects image attachments', () => {
+      const attachment = { name: 'photo.png', url: 'https://cdn.example.com/photo.png', contentType: 'image/png' };
+      const message = {
+        attachments: createAttachmentCollection([attachment]),
+        embeds: []
+      };
+
+      expect(hasImageAttachment(message)).toBe(true);
+      expect(getFirstImageUrl(message)).toBe(attachment.url);
+    });
+
+    it('detects embedded images', () => {
+      const message = {
+        attachments: createAttachmentCollection([]),
+        embeds: [{ image: { url: 'https://imgur.example.com/vouch.jpg' } }]
+      };
+
+      expect(hasImageAttachment(message)).toBe(true);
+      expect(getFirstImageUrl(message)).toBe('https://imgur.example.com/vouch.jpg');
+    });
+
+    it('returns false when no images are present', () => {
+      const message = {
+        attachments: createAttachmentCollection([]),
+        embeds: []
+      };
+
+      expect(hasImageAttachment(message)).toBe(false);
+      expect(getFirstImageUrl(message)).toBeNull();
     });
   });
 });
