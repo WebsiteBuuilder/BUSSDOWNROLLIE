@@ -66,8 +66,12 @@ export function mentionsRole(message, roleId) {
  * Calculate transfer fee
  */
 export function calculateTransferFee(amount, feePercent) {
+  if (feePercent <= 0) {
+    return 0;
+  }
+
   const fee = Math.floor((amount * feePercent) / 100);
-  return Math.max(fee, 1); // Minimum 1 VP fee
+  return Math.max(fee, 1); // Minimum 1 VP fee when a fee is enabled
 }
 
 /**
