@@ -48,6 +48,11 @@ describe('Utility Functions', () => {
       expect(calculateTransferFee(5, 5)).toBe(1);
       expect(calculateTransferFee(1, 5)).toBe(1);
     });
+
+    it('should allow zero fee when percentage is zero or negative', () => {
+      expect(calculateTransferFee(100, 0)).toBe(0);
+      expect(calculateTransferFee(100, -5)).toBe(0);
+    });
   });
 
   describe('calculateBattleRake', () => {
