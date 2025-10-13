@@ -6,6 +6,7 @@ import { readdirSync } from 'fs';
 import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
 import { handleBattleInteraction } from './commands/battle.js';
+import { handleBlackjackInteraction } from './commands/blackjack.js';
 
 // Load environment variables
 config();
@@ -180,6 +181,16 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.isButton()) {
     const customId = interaction.customId ?? '';
+
+    if (customId.startsWith('bj_')) {
+      try {
+        await handleBlackjackInteraction(interaction);
+      } catch (error) {
+        console.error('Error handling blackjack interaction:', error);
+      }
+      return;
+    }
+
     const battlePrefixes = ['battle_', 'rps_', 'hilow_', 'reaction_'];
 
     if (battlePrefixes.some(prefix => customId.startsWith(prefix))) {
