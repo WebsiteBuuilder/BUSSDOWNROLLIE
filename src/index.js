@@ -5,6 +5,7 @@ import { dirname, join } from 'path';
 import { readdirSync } from 'fs';
 import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
+import { handleBattleInteraction } from './commands/battle.js';
 
 // Load environment variables
 config();
@@ -162,16 +163,30 @@ client.on('interactionCreate', async (interaction) => {
       await command.execute(interaction, client);
     } catch (error) {
       console.error(`Error executing ${interaction.commandName}:`, error);
-      
-      const errorMessage = { 
-        content: '❌ There was an error executing this command!', 
-        ephemeral: true 
+
+      const errorMessage = {
+        content: '❌ There was an error executing this command!',
+        ephemeral: true
       };
 
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(errorMessage);
       } else {
         await interaction.reply(errorMessage);
+      }
+    }
+    return;
+  }
+
+  if (interaction.isButton()) {
+    const customId = interaction.customId ?? '';
+    const battlePrefixes = ['battle_', 'rps_', 'hilow_', 'reaction_'];
+
+    if (battlePrefixes.some(prefix => customId.startsWith(prefix))) {
+      try {
+        await handleBattleInteraction(interaction);
+      } catch (error) {
+        console.error('Error handling battle interaction:', error);
       }
     }
   }

@@ -192,9 +192,10 @@ export async function execute(interaction, client) {
   }
 }
 
-// Handle button interactions
-client.on('interactionCreate', async (interaction) => {
-  if (!interaction.isButton()) return;
+export async function handleBattleInteraction(interaction) {
+  if (!interaction.isButton()) {
+    return false;
+  }
 
   const customId = interaction.customId;
 
@@ -213,25 +214,28 @@ client.on('interactionCreate', async (interaction) => {
       });
 
       if (!battle) {
-        return interaction.reply({
+        await interaction.reply({
           content: '❌ Battle not found.',
           ephemeral: true
         });
+        return true;
       }
 
       // Only opponent can respond
       if (interaction.user.id !== battle.opponent.discordId) {
-        return interaction.reply({
+        await interaction.reply({
           content: '❌ Only the challenged user can respond.',
           ephemeral: true
         });
+        return true;
       }
 
       if (battle.status !== 'open') {
-        return interaction.reply({
+        await interaction.reply({
           content: '❌ This battle is no longer available.',
           ephemeral: true
         });
+        return true;
       }
 
       if (action === 'decline') {
@@ -251,7 +255,7 @@ client.on('interactionCreate', async (interaction) => {
           components: []
         });
 
-        return;
+        return true;
       }
 
       // Accept battle
@@ -260,28 +264,35 @@ client.on('interactionCreate', async (interaction) => {
       // Start game based on type
       await startGame(interaction, battle);
 
+      return true;
     } catch (error) {
       console.error('Error handling battle button:', error);
       await interaction.reply({
         content: '❌ An error occurred. Please try again.',
         ephemeral: true
       });
+      return true;
     }
   }
 
   // Game-specific button handlers
   if (customId.startsWith('rps_')) {
     await handleRPSButton(interaction);
+    return true;
   }
 
   if (customId.startsWith('hilow_')) {
     await handleHiLoButton(interaction);
+    return true;
   }
 
   if (customId.startsWith('reaction_')) {
     await handleReactionButton(interaction);
+    return true;
   }
-});
+
+  return false;
+}
 
 async function startGame(interaction, battle) {
   let gameState;
