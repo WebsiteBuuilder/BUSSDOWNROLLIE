@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, AttachmentBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import prisma, { getOrCreateUser, setConfig, getConfig } from '../db/index.js';
 import { formatVP, exportToCSV } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -6,7 +6,6 @@ import { logTransaction } from '../lib/logger.js';
 export const data = new SlashCommandBuilder()
   .setName('admin')
   .setDescription('Admin commands for managing VP economy')
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand(subcommand =>
     subcommand
       .setName('add')
@@ -117,9 +116,15 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
-  // Check if user has admin role
+  const adminRoleId = process.env.ADMIN_ROLE_ID;
+  const providerRoleId = process.env.PROVIDER_ROLE_ID;
+
+  // Check if user has admin or provider role
   const member = await interaction.guild.members.fetch(interaction.user.id);
-  if (!member.roles.cache.has(process.env.ADMIN_ROLE_ID)) {
+  const hasAdminRole = adminRoleId ? member.roles.cache.has(adminRoleId) : false;
+  const hasProviderRole = providerRoleId ? member.roles.cache.has(providerRoleId) : false;
+
+  if (!hasAdminRole && !hasProviderRole) {
     return interaction.reply({
       content: '❌ You do not have permission to use admin commands.',
       ephemeral: true
