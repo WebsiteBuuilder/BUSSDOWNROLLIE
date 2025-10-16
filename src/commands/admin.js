@@ -115,14 +115,26 @@ export const data = new SlashCommandBuilder()
       .setDescription('Export all user balances as CSV')
   );
 
+function hasProviderAccess(member) {
+  const providerRoleId = process.env.PROVIDER_ROLE_ID;
+
+  if (providerRoleId && member.roles.cache.has(providerRoleId)) {
+    return true;
+  }
+
+  return member.roles.cache.some(role => {
+    const name = role.name.toLowerCase();
+    return name.includes('provider') || name.includes('staff');
+  });
+}
+
 export async function execute(interaction) {
   const adminRoleId = process.env.ADMIN_ROLE_ID;
-  const providerRoleId = process.env.PROVIDER_ROLE_ID;
 
   // Check if user has admin or provider role
   const member = await interaction.guild.members.fetch(interaction.user.id);
   const hasAdminRole = adminRoleId ? member.roles.cache.has(adminRoleId) : false;
-  const hasProviderRole = providerRoleId ? member.roles.cache.has(providerRoleId) : false;
+  const hasProviderRole = hasProviderAccess(member);
 
   if (!hasAdminRole && !hasProviderRole) {
     return interaction.reply({
