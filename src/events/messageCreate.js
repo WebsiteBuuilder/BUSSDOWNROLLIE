@@ -1,4 +1,4 @@
-import { hasImageAttachment, getFirstImageUrl, getProviderRoleIds } from '../lib/utils.js';
+import { hasImageAttachment, getFirstImageUrl, getProviderRoleIds, formatVP } from '../lib/utils.js';
 import prisma, { getOrCreateUser } from '../db/index.js';
 import { logTransaction } from '../lib/logger.js';
 
@@ -96,6 +96,23 @@ export async function execute(message) {
 
       // Send confirmation in channel
       await message.react('✅');
+
+      const acknowledgementLines = [
+        `✅ Vouch verified! Added +1 point to <@${message.author.id}>'s balance.`,
+      ];
+
+      if (typeof updatedUser?.vp === 'number') {
+        acknowledgementLines.push(`Current balance: ${formatVP(updatedUser.vp)}.`);
+      }
+
+      try {
+        await message.channel.send({
+          content: acknowledgementLines.join('\n'),
+          allowedMentions: { users: [message.author.id] },
+        });
+      } catch (sendError) {
+        console.warn('Failed to send vouch acknowledgement message', sendError);
+      }
 
       // Log transaction
       await logTransaction('vouch', {
