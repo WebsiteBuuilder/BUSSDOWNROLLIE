@@ -106,16 +106,6 @@ A production-ready Discord bot for GUHD EATS, featuring a complete vouch-based v
 - Set `GUILD_ID` in `.env` during development for instant guild-scoped updates.
 - Remove `GUILD_ID` (or leave it empty) to publish commands globally once changes are stable (may take up to 1 hour to propagate).
 
-## Avoiding “Interaction Failed”
-
-Discord expects every interaction—slash commands and message components alike—to be acknowledged within three seconds and only once. The bot now centralizes these safeguards in `src/utils/interaction.js`:
-
-- **3-second rule**: Call `ackWithin3s()` at the start of each handler. It warns through the logger when acknowledgement takes longer than two seconds and prevents timeouts.
-- **Single reply rule**: Use `safeReply()` to send or follow up without risking “Unknown interaction” errors when a handler needs to recover from failures. Button handlers call `ackButton()` immediately so the UI never shows “Interaction Failed.”
-- **Consistent updates**: After acknowledging a button, edit the original message (via `i.message.edit`) instead of mixing ephemeral and public responses.
-
-Battle component handlers combine these helpers with permission checks so that only the initiating players can press their buttons; everyone else receives a private notice while the button press is still acknowledged in time.
-
 ### Blackjack Configuration & Casino Channel
 
 - Set `CASINO_CHANNEL_ID` to the text channel where casino games are permitted (for example, `#casino`).
