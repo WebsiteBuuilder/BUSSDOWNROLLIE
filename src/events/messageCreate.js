@@ -9,8 +9,13 @@ export async function execute(message) {
   // Ignore bots
   if (message.author.bot) return;
 
-  // Check if message is in vouch channel
-  if (message.channel.id !== process.env.VOUCH_CHANNEL_ID) return;
+  // Check if message is in the configured vouch channel (fallback to channel name)
+  const vouchChannelId = process.env.VOUCH_CHANNEL_ID;
+  const isVouchChannel = vouchChannelId
+    ? message.channel.id === vouchChannelId
+    : message.channel.name?.toLowerCase().includes('vouch');
+
+  if (!isVouchChannel) return;
 
   // Validate message has image attachment
   if (!hasImageAttachment(message)) {
