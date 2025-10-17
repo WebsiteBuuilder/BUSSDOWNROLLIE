@@ -1,41 +1,144 @@
-import { randomUUID } from 'crypto';
 import {
   SlashCommandBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  EmbedBuilder,
 } from 'discord.js';
-import { ackButton, ackWithin3s, safeReply } from '../utils/interaction.js';
-import { BATTLE_NAMESPACE, BattleStatus } from '../types.js';
-import { logger } from '../logger.js';
-import { handleBattleAttackButton } from '../components/buttons/battleAttack.js';
-import { handleBattleRunButton } from '../components/buttons/battleRun.js';
+import { safeReply } from '../utils/interaction.js';
+import { formatVP } from '../lib/utils.js';
 
-const BATTLE_TIMEOUT_MS = 60_000;
+export const BATTLE_MENU_NAMESPACE = 'battle-menu';
 
-const battles = new Map();
+const BATTLE_GAMES = [
+  {
+    value: 'coinflip',
+    label: 'Coin Flip',
+    menuDescription: '50/50 toss — quick and decisive.',
+    summaryTemplate: 'Flip a single coin; the winner pockets {amount}.',
+    instructions: [
+      'Decide who will call heads or tails before the flip.',
+      'Use `/coinflip` or another verifiable bot to toss once.',
+      'Whoever wins the toss receives {amount}.',
+    ],
+  },
+  {
+    value: 'rps',
+    label: 'Rock Paper Scissors',
+    menuDescription: 'Best of three skill check.',
+    summaryTemplate: 'Throw hands in chat — first to two wins takes {amount}.',
+    instructions: [
+      'Count down in chat and reveal your choice at the same time.',
+      'Play a best-of-three set. Track wins in the channel to keep things transparent.',
+      'The first player to earn two wins claims {amount}.',
+    ],
+  },
+  {
+    value: 'dice',
+    label: 'Dice Duel',
+    menuDescription: 'High roll wins it all.',
+    summaryTemplate: 'Roll the dice; higher number grabs {amount}.',
+    instructions: [
+      'Both players roll with `/roll 1d100` or an agreed dice bot.',
+      'If you tie, roll again until someone wins outright.',
+      'The higher roll takes home {amount}.',
+    ],
+  },
+  {
+    value: 'connect4',
+    label: 'Connect Four',
+    menuDescription: 'Strategy showdown in a shared lobby.',
+    summaryTemplate: 'Battle in a single Connect Four match for {amount}.',
+    instructions: [
+      'Create a public Connect Four lobby (e.g., playok.com) and share the link.',
+      'Play one full game. Keep the chat updated with turns if the site lacks a log.',
+      'Winner screenshots the result if needed and receives {amount}.',
+    ],
+  },
+  {
+    value: 'trivia',
+    label: 'Trivia Faceoff',
+    menuDescription: 'Neutral host asks the question.',
+    summaryTemplate: 'First correct answer to a hosted question earns {amount}.',
+    instructions: [
+      'Ping a neutral host or staff member to provide a trivia question.',
+      'Both players answer in chat. The host decides who answered correctly first.',
+      'Host confirms the winner, who then collects {amount}.',
+    ],
+  },
+];
 
-const buttonHandlers = {
-  attack: handleBattleAttackButton,
-  run: handleBattleRunButton,
-};
+function renderTemplate(template, context) {
+  return template.replace(/\{(amount|challenger|opponent)\}/g, (_, key) => context[key] ?? `{${key}}`);
+}
+
+function buildGameSelectRow(challengerId, opponentId, amount) {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`${BATTLE_MENU_NAMESPACE}:${challengerId}:${opponentId}:${amount}`)
+    .setPlaceholder('Select a game to view how to play')
+    .addOptions(
+      BATTLE_GAMES.map((game) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(game.label)
+          .setValue(game.value)
+          .setDescription(game.menuDescription)
+      )
+    );
+
+  return new ActionRowBuilder().addComponents(select);
+}
+
+function buildOverviewEmbed({ challengerId, opponentId, amountLabel }) {
+  const embed = new EmbedBuilder()
+    .setTitle('Choose Your Battle Game')
+    .setColor(0x5865f2)
+    .setDescription(
+      [
+        `Challenger: <@${challengerId}>`,
+        `Opponent: <@${opponentId}>`,
+        `Wager: ${amountLabel}`,
+        '',
+        'Pick a game from the menu below to view quick rules and settle your vouch-point duel.',
+      ].join('\n')
+    );
+
+  embed.addFields(
+    BATTLE_GAMES.map((game, index) => ({
+      name: `${index + 1}. ${game.label}`,
+      value: renderTemplate(game.summaryTemplate, {
+        amount: amountLabel,
+        challenger: `<@${challengerId}>`,
+        opponent: `<@${opponentId}>`,
+      }),
+    }))
+  );
+
+  return embed;
+}
 
 export const data = new SlashCommandBuilder()
   .setName('battle')
-  .setDescription('Challenge another user to a quick battle!')
+  .setDescription('Challenge another user and pick a game to wager vouch points.')
   .addUserOption((option) =>
     option
       .setName('opponent')
       .setDescription('Who do you want to challenge?')
       .setRequired(true)
+  )
+  .addIntegerOption((option) =>
+    option
+      .setName('amount')
+      .setDescription('How many vouch points are on the line?')
+      .setRequired(true)
+      .setMinValue(1)
   );
 
 export async function handleBattle(interaction) {
   const opponent = interaction.options.getUser('opponent', true);
-  const markAck = ackWithin3s(interaction, { scope: 'battle-command' });
+  const amount = interaction.options.getInteger('amount', true);
+  const challengerId = interaction.user.id;
 
   if (opponent.bot) {
-    markAck();
     await safeReply(interaction, {
       content: '🤖 You cannot battle a bot. Choose a real opponent!',
       ephemeral: true,
@@ -43,8 +146,7 @@ export async function handleBattle(interaction) {
     return;
   }
 
-  if (opponent.id === interaction.user.id) {
-    markAck();
+  if (opponent.id === challengerId) {
     await safeReply(interaction, {
       content: '🪞 Battling yourself is not allowed. Pick someone else!',
       ephemeral: true,
@@ -52,43 +154,18 @@ export async function handleBattle(interaction) {
     return;
   }
 
-  const battleId = randomUUID();
-  const participants = [interaction.user.id, opponent.id];
-  const participantsKey = participants.join(',');
-  const battle = {
-    id: battleId,
-    initiatorId: interaction.user.id,
+  const amountLabel = formatVP(amount);
+  const embed = buildOverviewEmbed({
+    challengerId,
     opponentId: opponent.id,
-    participants,
-    participantsKey,
-    status: BattleStatus.Active,
-    hp: {
-      [interaction.user.id]: 100,
-      [opponent.id]: 100,
-    },
-    log: [`⚔️ **${interaction.user.username}** challenged **${opponent.username}**!`],
-    createdAt: Date.now(),
-    lastActionAt: Date.now(),
-    timeout: null,
-    message: null,
-  };
-
-  const message = await safeReply(interaction, {
-    content: renderBattleState(battle),
-    components: buildBattleControls(battle),
-    fetchReply: true,
+    amountLabel,
   });
 
-  markAck();
+  const components = [buildGameSelectRow(challengerId, opponent.id, amount)];
 
-  battle.message = message;
-  battles.set(battleId, battle);
-  scheduleBattleTimeout(battleId);
-
-  logger.info('battle started', {
-    battleId,
-    initiatorId: interaction.user.id,
-    opponentId: opponent.id,
+  await safeReply(interaction, {
+    embeds: [embed],
+    components,
   });
 }
 
@@ -96,188 +173,59 @@ export async function execute(interaction) {
   return handleBattle(interaction);
 }
 
-export function getBattle(battleId) {
-  return battles.get(battleId);
-}
+export async function handleBattleGameSelect(interaction) {
+  const customId = interaction.customId ?? '';
 
-export function setBattle(battleId, state) {
-  battles.set(battleId, state);
-  scheduleBattleTimeout(battleId);
-}
-
-export function deleteBattle(battleId) {
-  const battle = battles.get(battleId);
-  if (battle?.timeout) {
-    clearTimeout(battle.timeout);
-  }
-  battles.delete(battleId);
-}
-
-export async function endBattle(battleId, reason) {
-  const battle = battles.get(battleId);
-  if (!battle) return;
-
-  if (battle.timeout) {
-    clearTimeout(battle.timeout);
-    battle.timeout = null;
+  if (!customId.startsWith(`${BATTLE_MENU_NAMESPACE}:`)) {
+    return false;
   }
 
-  battle.status = BattleStatus.Ended;
-  battle.endedAt = Date.now();
-  battle.endedReason = reason;
-  battles.set(battleId, battle);
+  const [, challengerId, opponentId, amountRaw] = customId.split(':');
+  const amount = Number.parseInt(amountRaw, 10);
+  const amountLabel = Number.isNaN(amount) ? `${amountRaw} VP` : formatVP(amount);
 
-  if (battle.message) {
-    try {
-      await battle.message.edit({
-        content: renderBattleState(battle),
-        components: buildBattleControls(battle),
-      });
-    } catch (err) {
-      logger.warn('failed to edit battle message on end', {
-        err,
-        battleId,
-      });
-    }
+  if (![challengerId, opponentId].includes(interaction.user?.id)) {
+    await interaction.reply({
+      ephemeral: true,
+      content: '❌ Only the challenger and opponent can view the battle game details.',
+    });
+    return true;
   }
 
-  battles.delete(battleId);
-}
+  const selection = interaction.values?.[0];
+  const game = BATTLE_GAMES.find((option) => option.value === selection);
 
-function scheduleBattleTimeout(battleId) {
-  const battle = battles.get(battleId);
-  if (!battle) return;
-
-  if (battle.timeout) {
-    clearTimeout(battle.timeout);
+  if (!game) {
+    await interaction.reply({
+      ephemeral: true,
+      content: 'That game is no longer available. Please pick another option.',
+    });
+    return true;
   }
 
-  battle.timeout = setTimeout(() => {
-    handleBattleTimeout(battleId).catch((err) =>
-      logger.error('battle timeout error', { err, battleId })
+  const context = {
+    amount: amountLabel,
+    challenger: `<@${challengerId}>`,
+    opponent: `<@${opponentId}>`,
+  };
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${game.label} — ${amountLabel}`)
+    .setColor(0x43b581)
+    .setDescription(
+      [
+        renderTemplate(game.summaryTemplate, context),
+        '',
+        ...game.instructions.map((line) => `• ${renderTemplate(line, context)}`),
+        '',
+        '✅ Make sure both players confirm the result so the wager can be paid out.',
+      ].join('\n')
     );
-  }, BATTLE_TIMEOUT_MS);
-  battle.timeout.unref?.();
-}
 
-async function handleBattleTimeout(battleId) {
-  const battle = battles.get(battleId);
-  if (!battle || battle.status !== BattleStatus.Active) {
-    return;
-  }
+  await interaction.reply({
+    ephemeral: true,
+    embeds: [embed],
+  });
 
-  battle.status = BattleStatus.Ended;
-  battle.log.push('⌛ The battle ended due to inactivity.');
-
-  if (battle.message) {
-    try {
-      await battle.message.edit({
-        content: renderBattleState(battle),
-        components: buildBattleControls(battle),
-      });
-    } catch (err) {
-      logger.warn('failed to edit battle message after timeout', {
-        err,
-        battleId,
-      });
-    }
-  }
-
-  deleteBattle(battleId);
-}
-
-export function buildBattleControls(battle) {
-  const disabled = battle.status !== BattleStatus.Active;
-  const idSuffix = `${battle.id}:${battle.participantsKey}`;
-
-  if (disabled) {
-    return [];
-  }
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`${BATTLE_NAMESPACE}:attack:${idSuffix}`)
-      .setLabel('Attack')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(`${BATTLE_NAMESPACE}:run:${idSuffix}`)
-      .setLabel('Run')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled)
-  );
-
-  return [row];
-}
-
-export function renderBattleState(battle) {
-  const initiatorHp = battle.hp[battle.initiatorId];
-  const opponentHp = battle.hp[battle.opponentId];
-  const latestEvent = battle.log[battle.log.length - 1] ?? 'The battle continues.';
-
-  const lines = [
-    `**${latestEvent}**`,
-    '',
-    `🛡️ <@${battle.initiatorId}> — HP: ${initiatorHp}`,
-    `🛡️ <@${battle.opponentId}> — HP: ${opponentHp}`,
-  ];
-
-  if (battle.status === BattleStatus.Ended) {
-    lines.push('', 'The battle has concluded.');
-  } else {
-    lines.push('', 'Press **Attack** to strike or **Run** to flee.');
-  }
-
-  return lines.join('\n');
-}
-
-export async function routeBattleButton(action, battleId, allowedUserId, interaction) {
-  const handler = buttonHandlers[action];
-
-  if (!handler) {
-    logger.warn('unknown battle button action', {
-      action,
-      battleId,
-      customId: interaction.customId,
-    });
-    await ackButton(interaction);
-    await interaction.followUp({
-      ephemeral: true,
-      content: 'That battle action is no longer available.',
-    });
-    return;
-  }
-
-  const allowedUserIds = allowedUserId
-    ? allowedUserId.split(',').filter(Boolean)
-    : [];
-
-  try {
-    await handler({
-      action,
-      allowedUserIds,
-      battleId,
-      interaction,
-      getBattle,
-      setBattle,
-      endBattle,
-      buildBattleControls,
-      renderBattleState,
-    });
-  } catch (err) {
-    logger.error('battle button handler error', {
-      err,
-      action,
-      battleId,
-      interactionId: interaction.id,
-      userId: interaction.user?.id,
-    });
-    if (!interaction.deferred && !interaction.replied) {
-      await ackButton(interaction);
-    }
-    await interaction.followUp({
-      ephemeral: true,
-      content: 'Something went wrong processing this battle action.',
-    });
-  }
+  return true;
 }
