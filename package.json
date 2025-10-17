@@ -9,6 +9,10 @@
     "start": "node src/index.js",
     "test": "vitest run --config vitest.config.js",
     "test:watch": "vitest --config vitest.config.js",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint --config .eslintrc.cjs \"src/**/*.js\" \"tests/**/*.js\"",
+    "lint:fix": "npm run lint -- --fix",
+    "format": "prettier --check \"src/**/*.js\" \"tests/**/*.js\" README.md package.json",
+    "format:fix": "prettier --write \"src/**/*.js\" \"tests/**/*.js\" README.md package.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
@@ -28,6 +32,10 @@
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
+    "eslint": "^9.13.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "prettier": "^3.3.3",
     "prisma": "^6.17.1",
     "vitest": "^1.1.0"
   },

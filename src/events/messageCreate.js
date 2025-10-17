@@ -25,14 +25,14 @@ export async function execute(message) {
     if (user.blacklisted) {
       await message.reply({
         content: '❌ You are blacklisted and cannot earn VP.',
-        ephemeral: true
+        ephemeral: true,
       });
       return;
     }
 
     // Check for duplicate vouch
     const existingVouch = await prisma.vouch.findUnique({
-      where: { messageId: message.id }
+      where: { messageId: message.id },
     });
 
     if (existingVouch) {
@@ -43,10 +43,8 @@ export async function execute(message) {
 
     // Check if provider role or a member with the provider role was mentioned
     const providerMentioned = providerRoleId
-      ? (
-        mentionsRole(message, providerRoleId) ||
-        message.mentions.members?.some(member => member.roles.cache.has(providerRoleId))
-      )
+      ? mentionsRole(message, providerRoleId) ||
+        message.mentions.members?.some((member) => member.roles.cache.has(providerRoleId))
       : false;
     const imageUrl = getFirstImageUrl(message);
 
@@ -55,7 +53,7 @@ export async function execute(message) {
       const updatedUser = await prisma.$transaction(async (tx) => {
         const incrementedUser = await tx.user.update({
           where: { id: user.id },
-          data: { vp: { increment: 1 } }
+          data: { vp: { increment: 1 } },
         });
 
         await tx.vouch.create({
@@ -64,8 +62,8 @@ export async function execute(message) {
             userId: user.id,
             imageUrl,
             providerMentioned: true,
-            status: 'auto'
-          }
+            status: 'auto',
+          },
         });
 
         return incrementedUser;
@@ -74,15 +72,15 @@ export async function execute(message) {
       // DM user confirmation
       try {
         await message.author.send({
-          embeds: [{
-            color: 0x00FF00,
-            title: '✅ Vouch Approved!',
-            description: 'Thanks for the vouch! +1 VP',
-            fields: [
-              { name: 'New Balance', value: `${updatedUser.vp} VP 💰`, inline: true }
-            ],
-            timestamp: new Date().toISOString()
-          }]
+          embeds: [
+            {
+              color: 0x00ff00,
+              title: '✅ Vouch Approved!',
+              description: 'Thanks for the vouch! +1 VP',
+              fields: [{ name: 'New Balance', value: `${updatedUser.vp} VP 💰`, inline: true }],
+              timestamp: new Date().toISOString(),
+            },
+          ],
         });
       } catch (error) {
         console.log('Could not DM user:', error.message);
@@ -96,9 +94,8 @@ export async function execute(message) {
         userId: message.author.id,
         amount: 1,
         status: 'auto',
-        messageLink: message.url
+        messageLink: message.url,
       });
-
     } else {
       // Create pending vouch
       await prisma.vouch.create({
@@ -107,8 +104,8 @@ export async function execute(message) {
           userId: user.id,
           imageUrl,
           providerMentioned: false,
-          status: 'pending'
-        }
+          status: 'pending',
+        },
       });
 
       try {
@@ -119,16 +116,16 @@ export async function execute(message) {
 
       // Reply with instruction
       await message.reply({
-        content: '⏳ Please @ a provider to validate your vouch, or wait for manual approval with `/approvevouch`.',
-        allowedMentions: { repliedUser: true }
+        content:
+          '⏳ Please @ a provider to validate your vouch, or wait for manual approval with `/approvevouch`.',
+        allowedMentions: { repliedUser: true },
       });
     }
   } catch (error) {
     console.error('Error processing vouch:', error);
     await message.reply({
       content: '❌ An error occurred processing your vouch. Please try again later.',
-      allowedMentions: { repliedUser: true }
+      allowedMentions: { repliedUser: true },
     });
   }
 }
-

@@ -1,4 +1,10 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import prisma, { getOrCreateUser, hasActiveBattle, getConfig } from '../db/index.js';
 import { formatVP, calculateBattleRake } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -14,26 +20,23 @@ import {
   resolveHiLo,
   resolveReaction,
   formatCard,
-  getGameDisplayName
+  getGameDisplayName,
 } from '../lib/games.js';
 
 export const data = new SlashCommandBuilder()
   .setName('battle')
   .setDescription('Challenge another user to a 1v1 game')
-  .addUserOption(option =>
-    option
-      .setName('user')
-      .setDescription('User to challenge')
-      .setRequired(true)
+  .addUserOption((option) =>
+    option.setName('user').setDescription('User to challenge').setRequired(true)
   )
-  .addIntegerOption(option =>
+  .addIntegerOption((option) =>
     option
       .setName('amount')
       .setDescription('Amount of VP to wager')
       .setRequired(true)
       .setMinValue(1)
   )
-  .addStringOption(option =>
+  .addStringOption((option) =>
     option
       .setName('game')
       .setDescription('Game type to play')
@@ -47,7 +50,7 @@ export const data = new SlashCommandBuilder()
       )
   );
 
-export async function execute(interaction, client) {
+export async function execute(interaction, _client) {
   const opponent = interaction.options.getUser('user');
   const amount = interaction.options.getInteger('amount');
   const gameType = interaction.options.getString('game') || 'rps';
@@ -57,14 +60,14 @@ export async function execute(interaction, client) {
   if (opponent.bot) {
     return interaction.reply({
       content: '❌ You cannot challenge bots to battles.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
   if (opponent.id === challenger.id) {
     return interaction.reply({
       content: '❌ You cannot challenge yourself.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
@@ -78,39 +81,39 @@ export async function execute(interaction, client) {
     // Check blacklist
     if (challengerUser.blacklisted) {
       return interaction.editReply({
-        content: '❌ You are blacklisted and cannot participate in battles.'
+        content: '❌ You are blacklisted and cannot participate in battles.',
       });
     }
 
     if (opponentUser.blacklisted) {
       return interaction.editReply({
-        content: '❌ This user is blacklisted and cannot participate in battles.'
+        content: '❌ This user is blacklisted and cannot participate in battles.',
       });
     }
 
     // Check active battles
     if (await hasActiveBattle(challenger.id)) {
       return interaction.editReply({
-        content: '❌ You already have an active battle. Finish it first.'
+        content: '❌ You already have an active battle. Finish it first.',
       });
     }
 
     if (await hasActiveBattle(opponent.id)) {
       return interaction.editReply({
-        content: '❌ This user already has an active battle.'
+        content: '❌ This user already has an active battle.',
       });
     }
 
     // Check balances
     if (challengerUser.vp < amount) {
       return interaction.editReply({
-        content: `❌ Insufficient balance. You need ${formatVP(amount)}, but you only have ${formatVP(challengerUser.vp)}.`
+        content: `❌ Insufficient balance. You need ${formatVP(amount)}, but you only have ${formatVP(challengerUser.vp)}.`,
       });
     }
 
     if (opponentUser.vp < amount) {
       return interaction.editReply({
-        content: `❌ Opponent has insufficient balance. They need ${formatVP(amount)}, but they only have ${formatVP(opponentUser.vp)}.`
+        content: `❌ Opponent has insufficient balance. They need ${formatVP(amount)}, but they only have ${formatVP(opponentUser.vp)}.`,
       });
     }
 
@@ -122,13 +125,13 @@ export async function execute(interaction, client) {
         game: gameType,
         amount,
         status: 'open',
-        state: JSON.stringify({})
-      }
+        state: JSON.stringify({}),
+      },
     });
 
     // Create challenge embed
     const embed = new EmbedBuilder()
-      .setColor(0xFFD700)
+      .setColor(0xffd700)
       .setTitle(`🎮 Battle Challenge: ${getGameDisplayName(gameType)}`)
       .setDescription(`**${challenger.username}** challenges **${opponent.username}**!`)
       .addFields(
@@ -139,55 +142,53 @@ export async function execute(interaction, client) {
       .setFooter({ text: 'You have 60 seconds to accept or decline' })
       .setTimestamp();
 
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`battle_accept_${battle.id}`)
-          .setLabel('✅ Accept')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`battle_decline_${battle.id}`)
-          .setLabel('❌ Decline')
-          .setStyle(ButtonStyle.Danger)
-      );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`battle_accept_${battle.id}`)
+        .setLabel('✅ Accept')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`battle_decline_${battle.id}`)
+        .setLabel('❌ Decline')
+        .setStyle(ButtonStyle.Danger)
+    );
 
     const message = await interaction.editReply({
       content: `<@${opponent.id}>`,
       embeds: [embed],
-      components: [row]
+      components: [row],
     });
 
     // Set timeout for auto-cancel
     setTimeout(async () => {
       try {
         const currentBattle = await prisma.battle.findUnique({ where: { id: battle.id } });
-        
+
         if (currentBattle && currentBattle.status === 'open') {
           await prisma.battle.update({
             where: { id: battle.id },
-            data: { status: 'canceled' }
+            data: { status: 'canceled' },
           });
 
           const timeoutEmbed = new EmbedBuilder()
-            .setColor(0xFF0000)
+            .setColor(0xff0000)
             .setTitle('⏰ Battle Expired')
             .setDescription('The challenge was not accepted in time.')
             .setTimestamp();
 
           await message.edit({
             embeds: [timeoutEmbed],
-            components: []
+            components: [],
           });
         }
       } catch (error) {
         console.error('Error in battle timeout:', error);
       }
     }, 60000); // 60 seconds
-
   } catch (error) {
     console.error('Error in battle command:', error);
     await interaction.editReply({
-      content: '❌ Failed to create battle. Please try again.'
+      content: '❌ Failed to create battle. Please try again.',
     });
   }
 }
@@ -209,14 +210,14 @@ export async function handleBattleInteraction(interaction) {
         where: { id: battleId },
         include: {
           challenger: true,
-          opponent: true
-        }
+          opponent: true,
+        },
       });
 
       if (!battle) {
         await interaction.reply({
           content: '❌ Battle not found.',
-          ephemeral: true
+          ephemeral: true,
         });
         return true;
       }
@@ -225,7 +226,7 @@ export async function handleBattleInteraction(interaction) {
       if (interaction.user.id !== battle.opponent.discordId) {
         await interaction.reply({
           content: '❌ Only the challenged user can respond.',
-          ephemeral: true
+          ephemeral: true,
         });
         return true;
       }
@@ -233,7 +234,7 @@ export async function handleBattleInteraction(interaction) {
       if (battle.status !== 'open') {
         await interaction.reply({
           content: '❌ This battle is no longer available.',
-          ephemeral: true
+          ephemeral: true,
         });
         return true;
       }
@@ -241,18 +242,18 @@ export async function handleBattleInteraction(interaction) {
       if (action === 'decline') {
         await prisma.battle.update({
           where: { id: battleId },
-          data: { status: 'canceled' }
+          data: { status: 'canceled' },
         });
 
         const declineEmbed = new EmbedBuilder()
-          .setColor(0xFF0000)
+          .setColor(0xff0000)
           .setTitle('❌ Battle Declined')
           .setDescription(`**${interaction.user.username}** declined the challenge.`)
           .setTimestamp();
 
         await interaction.update({
           embeds: [declineEmbed],
-          components: []
+          components: [],
         });
 
         return true;
@@ -269,7 +270,7 @@ export async function handleBattleInteraction(interaction) {
       console.error('Error handling battle button:', error);
       await interaction.reply({
         content: '❌ An error occurred. Please try again.',
-        ephemeral: true
+        ephemeral: true,
       });
       return true;
     }
@@ -295,8 +296,6 @@ export async function handleBattleInteraction(interaction) {
 }
 
 async function startGame(interaction, battle) {
-  let gameState;
-
   switch (battle.game) {
     case 'rps':
       await startRPS(interaction, battle);
@@ -323,38 +322,35 @@ async function startRPS(interaction, battle) {
     where: { id: battle.id },
     data: {
       status: 'accepted',
-      state: JSON.stringify(gameState)
-    }
+      state: JSON.stringify(gameState),
+    },
   });
 
   const embed = new EmbedBuilder()
-    .setColor(0x00FF00)
+    .setColor(0x00ff00)
     .setTitle('🪨📄✂️ Rock Paper Scissors')
     .setDescription('Both players, make your choice!')
-    .addFields(
-      { name: 'Wager', value: formatVP(battle.amount), inline: true }
-    )
+    .addFields({ name: 'Wager', value: formatVP(battle.amount), inline: true })
     .setTimestamp();
 
-  const row = new ActionRowBuilder()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId(`rps_rock_${battle.id}`)
-        .setLabel('🪨 Rock')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`rps_paper_${battle.id}`)
-        .setLabel('📄 Paper')
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId(`rps_scissors_${battle.id}`)
-        .setLabel('✂️ Scissors')
-        .setStyle(ButtonStyle.Primary)
-    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`rps_rock_${battle.id}`)
+      .setLabel('🪨 Rock')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`rps_paper_${battle.id}`)
+      .setLabel('📄 Paper')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`rps_scissors_${battle.id}`)
+      .setLabel('✂️ Scissors')
+      .setStyle(ButtonStyle.Primary)
+  );
 
   await interaction.editReply({
     embeds: [embed],
-    components: [row]
+    components: [row],
   });
 }
 
@@ -365,13 +361,13 @@ async function handleRPSButton(interaction) {
 
   const battle = await prisma.battle.findUnique({
     where: { id: battleId },
-    include: { challenger: true, opponent: true }
+    include: { challenger: true, opponent: true },
   });
 
   if (!battle || battle.status === 'resolved') {
     return interaction.reply({
       content: '❌ This battle is no longer active.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
@@ -383,7 +379,7 @@ async function handleRPSButton(interaction) {
     if (gameState.challengerChoice) {
       return interaction.reply({
         content: '❌ You already made your choice!',
-        ephemeral: true
+        ephemeral: true,
       });
     }
     gameState.challengerChoice = choice;
@@ -391,20 +387,20 @@ async function handleRPSButton(interaction) {
     if (gameState.opponentChoice) {
       return interaction.reply({
         content: '❌ You already made your choice!',
-        ephemeral: true
+        ephemeral: true,
       });
     }
     gameState.opponentChoice = choice;
   } else {
     return interaction.reply({
       content: '❌ You are not part of this battle.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
   await interaction.reply({
     content: `✅ You chose **${choice}**!`,
-    ephemeral: true
+    ephemeral: true,
   });
 
   // Check if both players have chosen
@@ -413,7 +409,7 @@ async function handleRPSButton(interaction) {
   } else {
     await prisma.battle.update({
       where: { id: battleId },
-      data: { state: JSON.stringify(gameState) }
+      data: { state: JSON.stringify(gameState) },
     });
   }
 }
@@ -428,47 +424,55 @@ async function resolveRPSBattle(interaction, battle, gameState) {
 
     await prisma.battle.update({
       where: { id: battle.id },
-      data: { state: JSON.stringify(gameState) }
+      data: { state: JSON.stringify(gameState) },
     });
 
     const tieEmbed = new EmbedBuilder()
-      .setColor(0xFFFF00)
-      .setTitle('🤝 It\'s a Tie!')
+      .setColor(0xffff00)
+      .setTitle("🤝 It's a Tie!")
       .setDescription('Both players chose the same! Sudden death round...')
       .setTimestamp();
 
-    const row = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`rps_rock_${battle.id}`)
-          .setLabel('🪨 Rock')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`rps_paper_${battle.id}`)
-          .setLabel('📄 Paper')
-          .setStyle(ButtonStyle.Primary),
-        new ButtonBuilder()
-          .setCustomId(`rps_scissors_${battle.id}`)
-          .setLabel('✂️ Scissors')
-          .setStyle(ButtonStyle.Primary)
-      );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`rps_rock_${battle.id}`)
+        .setLabel('🪨 Rock')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`rps_paper_${battle.id}`)
+        .setLabel('📄 Paper')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`rps_scissors_${battle.id}`)
+        .setLabel('✂️ Scissors')
+        .setStyle(ButtonStyle.Primary)
+    );
 
     await interaction.message.edit({
       embeds: [tieEmbed],
-      components: [row]
+      components: [row],
     });
 
     return;
   }
 
-  await finalizeBattle(interaction, battle, winner === 'challenger' ? battle.challengerId : battle.opponentId, gameState);
+  await finalizeBattle(
+    interaction,
+    battle,
+    winner === 'challenger' ? battle.challengerId : battle.opponentId,
+    gameState
+  );
 }
 
 async function startHighCard(interaction, battle) {
   const gameState = createHighCardGame();
 
-  const winnerId = resolveHighCard(gameState) === 'challenger' ? battle.challengerId : 
-                   resolveHighCard(gameState) === 'opponent' ? battle.opponentId : null;
+  const winnerId =
+    resolveHighCard(gameState) === 'challenger'
+      ? battle.challengerId
+      : resolveHighCard(gameState) === 'opponent'
+        ? battle.opponentId
+        : null;
 
   if (winnerId === null) {
     // Tie, redraw
@@ -483,7 +487,7 @@ async function startDice(interaction, battle) {
   const gameState = createDiceGame();
 
   const result = resolveDice(gameState);
-  
+
   if (result === 'tie') {
     // Redraw
     await startDice(interaction, battle);
@@ -504,30 +508,29 @@ async function startHiLo(interaction, battle) {
     where: { id: battle.id },
     data: {
       status: 'accepted',
-      state: JSON.stringify(gameState)
-    }
+      state: JSON.stringify(gameState),
+    },
   });
 
   const embed = new EmbedBuilder()
-    .setColor(0x00FF00)
+    .setColor(0x00ff00)
     .setTitle('🎲 Hi-Lo Number Duel')
-    .setDescription(`A number between 1-100 has been chosen!\n\n**${interaction.client.users.cache.get(battle.challenger.discordId).username}** guesses **HIGH** (>50)\n**${interaction.client.users.cache.get(battle.opponent.discordId).username}** guesses **LOW** (<50)`)
-    .addFields(
-      { name: 'Wager', value: formatVP(battle.amount), inline: true }
+    .setDescription(
+      `A number between 1-100 has been chosen!\n\n**${interaction.client.users.cache.get(battle.challenger.discordId).username}** guesses **HIGH** (>50)\n**${interaction.client.users.cache.get(battle.opponent.discordId).username}** guesses **LOW** (<50)`
     )
+    .addFields({ name: 'Wager', value: formatVP(battle.amount), inline: true })
     .setTimestamp();
 
-  const row = new ActionRowBuilder()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId(`hilow_reveal_${battle.id}`)
-        .setLabel('🎲 Reveal Number')
-        .setStyle(ButtonStyle.Success)
-    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`hilow_reveal_${battle.id}`)
+      .setLabel('🎲 Reveal Number')
+      .setStyle(ButtonStyle.Success)
+  );
 
   await interaction.editReply({
     embeds: [embed],
-    components: [row]
+    components: [row],
   });
 }
 
@@ -537,13 +540,13 @@ async function handleHiLoButton(interaction) {
 
   const battle = await prisma.battle.findUnique({
     where: { id: battleId },
-    include: { challenger: true, opponent: true }
+    include: { challenger: true, opponent: true },
   });
 
   if (!battle) {
     return interaction.reply({
       content: '❌ Battle not found.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
@@ -570,31 +573,28 @@ async function startReaction(interaction, battle) {
     where: { id: battle.id },
     data: {
       status: 'accepted',
-      state: JSON.stringify(gameState)
-    }
+      state: JSON.stringify(gameState),
+    },
   });
 
   const embed = new EmbedBuilder()
-    .setColor(0xFFFF00)
+    .setColor(0xffff00)
     .setTitle('⚡ Reaction Duel')
     .setDescription('GET READY...\n\nClick the button as fast as you can when it says CLICK!')
-    .addFields(
-      { name: 'Wager', value: formatVP(battle.amount), inline: true }
-    )
+    .addFields({ name: 'Wager', value: formatVP(battle.amount), inline: true })
     .setTimestamp();
 
-  const row = new ActionRowBuilder()
-    .addComponents(
-      new ButtonBuilder()
-        .setCustomId(`reaction_ready_${battle.id}`)
-        .setLabel('⏳ WAIT...')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true)
-    );
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`reaction_ready_${battle.id}`)
+      .setLabel('⏳ WAIT...')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true)
+  );
 
   await interaction.editReply({
     embeds: [embed],
-    components: [row]
+    components: [row],
   });
 
   // Wait for the delay
@@ -603,49 +603,48 @@ async function startReaction(interaction, battle) {
 
     await prisma.battle.update({
       where: { id: battle.id },
-      data: { state: JSON.stringify(gameState) }
+      data: { state: JSON.stringify(gameState) },
     });
 
     const clickEmbed = new EmbedBuilder()
-      .setColor(0x00FF00)
+      .setColor(0x00ff00)
       .setTitle('⚡ CLICK NOW!')
       .setDescription('Click the button as fast as you can!')
       .setTimestamp();
 
-    const clickRow = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`reaction_click_${battle.id}`)
-          .setLabel('⚡ CLICK!')
-          .setStyle(ButtonStyle.Success)
-      );
+    const clickRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`reaction_click_${battle.id}`)
+        .setLabel('⚡ CLICK!')
+        .setStyle(ButtonStyle.Success)
+    );
 
     await interaction.editReply({
       embeds: [clickEmbed],
-      components: [clickRow]
+      components: [clickRow],
     });
 
     // Auto-resolve after 2 seconds
     setTimeout(async () => {
       const currentBattle = await prisma.battle.findUnique({ where: { id: battle.id } });
-      
+
       if (currentBattle && currentBattle.status === 'accepted') {
         const state = JSON.parse(currentBattle.state);
         const result = resolveReaction(state);
-        
+
         let winnerId;
         if (result === 'tie') {
           winnerId = null; // Both missed, restart
           await startReaction(interaction, currentBattle);
           return;
         } else {
-          winnerId = result === 'challenger' ? currentBattle.challengerId : currentBattle.opponentId;
+          winnerId =
+            result === 'challenger' ? currentBattle.challengerId : currentBattle.opponentId;
         }
 
         await finalizeBattle(interaction, currentBattle, winnerId, state);
       }
     }, 2000);
-
   }, gameState.delay);
 }
 
@@ -655,13 +654,13 @@ async function handleReactionButton(interaction) {
 
   const battle = await prisma.battle.findUnique({
     where: { id: battleId },
-    include: { challenger: true, opponent: true }
+    include: { challenger: true, opponent: true },
   });
 
   if (!battle || battle.status !== 'accepted') {
     return interaction.reply({
       content: '❌ This battle is no longer active.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
@@ -677,18 +676,18 @@ async function handleReactionButton(interaction) {
   } else {
     return interaction.reply({
       content: '❌ You are not part of this battle.',
-      ephemeral: true
+      ephemeral: true,
     });
   }
 
   await prisma.battle.update({
     where: { id: battleId },
-    data: { state: JSON.stringify(gameState) }
+    data: { state: JSON.stringify(gameState) },
   });
 
   await interaction.reply({
     content: `⚡ You clicked in **${clickTime}ms**!`,
-    ephemeral: true
+    ephemeral: true,
   });
 
   // Check if both have clicked
@@ -704,7 +703,7 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
   const rakePercentStr = await getConfig('battle_rake_percent', '2');
   const rakePercent = parseInt(rakePercentStr);
   const rake = calculateBattleRake(battle.amount, rakePercent);
-  const payout = (battle.amount * 2) - rake;
+  const payout = battle.amount * 2 - rake;
 
   // Update battle
   await prisma.battle.update({
@@ -713,8 +712,8 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
       status: 'resolved',
       winnerId,
       resolvedAt: new Date(),
-      state: JSON.stringify(gameState)
-    }
+      state: JSON.stringify(gameState),
+    },
   });
 
   // Transfer VP
@@ -724,13 +723,13 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
     // Deduct from loser
     await tx.user.update({
       where: { id: loserId },
-      data: { vp: { decrement: battle.amount } }
+      data: { vp: { decrement: battle.amount } },
     });
 
     // Add to winner (minus rake)
     await tx.user.update({
       where: { id: winnerId },
-      data: { vp: { increment: payout } }
+      data: { vp: { increment: payout } },
     });
   });
 
@@ -760,7 +759,7 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
   }
 
   const resultEmbed = new EmbedBuilder()
-    .setColor(0x00FF00)
+    .setColor(0x00ff00)
     .setTitle(`🏆 ${getGameDisplayName(battle.game)} - Winner!`)
     .setDescription(resultDescription)
     .addFields(
@@ -772,23 +771,25 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
 
   await interaction.message.edit({
     embeds: [resultEmbed],
-    components: []
+    components: [],
   });
 
   // DM both players
   try {
     const winnerUser = await interaction.client.users.fetch(winner.discordId);
     await winnerUser.send({
-      embeds: [{
-        color: 0x00FF00,
-        title: '🏆 Battle Won!',
-        description: `You won the **${getGameDisplayName(battle.game)}** battle!`,
-        fields: [
-          { name: 'Prize', value: formatVP(payout), inline: true },
-          { name: 'New Balance', value: formatVP(winner.vp), inline: true }
-        ],
-        timestamp: new Date().toISOString()
-      }]
+      embeds: [
+        {
+          color: 0x00ff00,
+          title: '🏆 Battle Won!',
+          description: `You won the **${getGameDisplayName(battle.game)}** battle!`,
+          fields: [
+            { name: 'Prize', value: formatVP(payout), inline: true },
+            { name: 'New Balance', value: formatVP(winner.vp), inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+        },
+      ],
     });
   } catch (error) {
     console.log('Could not DM winner:', error.message);
@@ -797,16 +798,18 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
   try {
     const loserUser = await interaction.client.users.fetch(loser.discordId);
     await loserUser.send({
-      embeds: [{
-        color: 0xFF0000,
-        title: '😔 Battle Lost',
-        description: `You lost the **${getGameDisplayName(battle.game)}** battle.`,
-        fields: [
-          { name: 'Lost', value: formatVP(battle.amount), inline: true },
-          { name: 'New Balance', value: formatVP(loser.vp), inline: true }
-        ],
-        timestamp: new Date().toISOString()
-      }]
+      embeds: [
+        {
+          color: 0xff0000,
+          title: '😔 Battle Lost',
+          description: `You lost the **${getGameDisplayName(battle.game)}** battle.`,
+          fields: [
+            { name: 'Lost', value: formatVP(battle.amount), inline: true },
+            { name: 'New Balance', value: formatVP(loser.vp), inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+        },
+      ],
     });
   } catch (error) {
     console.log('Could not DM loser:', error.message);
@@ -818,7 +821,6 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
     opponentId: battle.opponent.discordId,
     game: battle.game,
     amount: battle.amount,
-    winnerId: winner.discordId
+    winnerId: winner.discordId,
   });
 }
-

@@ -8,7 +8,7 @@ import {
   resolveDice,
   createHiLoGame,
   resolveHiLo,
-  getGameDisplayName
+  getGameDisplayName,
 } from '../src/lib/games.js';
 
 describe('Game Engines', () => {
@@ -24,7 +24,7 @@ describe('Game Engines', () => {
       expect(resolveRPS('rock', 'scissors')).toBe('challenger');
       expect(resolveRPS('paper', 'rock')).toBe('challenger');
       expect(resolveRPS('scissors', 'paper')).toBe('challenger');
-      
+
       expect(resolveRPS('scissors', 'rock')).toBe('opponent');
       expect(resolveRPS('rock', 'paper')).toBe('opponent');
       expect(resolveRPS('paper', 'scissors')).toBe('opponent');
@@ -50,19 +50,19 @@ describe('Game Engines', () => {
     it('should resolve based on card values', () => {
       const game1 = {
         challengerCard: { rank: 'A', suit: '♠️', value: 12 },
-        opponentCard: { rank: 'K', suit: '♥️', value: 11 }
+        opponentCard: { rank: 'K', suit: '♥️', value: 11 },
       };
       expect(resolveHighCard(game1)).toBe('challenger');
 
       const game2 = {
         challengerCard: { rank: '5', suit: '♦️', value: 3 },
-        opponentCard: { rank: '10', suit: '♣️', value: 8 }
+        opponentCard: { rank: '10', suit: '♣️', value: 8 },
       };
       expect(resolveHighCard(game2)).toBe('opponent');
 
       const game3 = {
         challengerCard: { rank: 'Q', suit: '♠️', value: 10 },
-        opponentCard: { rank: 'Q', suit: '♥️', value: 10 }
+        opponentCard: { rank: 'Q', suit: '♥️', value: 10 },
       };
       expect(resolveHighCard(game3)).toBe('tie');
     });
@@ -83,7 +83,7 @@ describe('Game Engines', () => {
         challengerRolls: [6, 6],
         opponentRolls: [1, 1],
         challengerTotal: 12,
-        opponentTotal: 2
+        opponentTotal: 2,
       };
       expect(resolveDice(game1)).toBe('challenger');
 
@@ -91,7 +91,7 @@ describe('Game Engines', () => {
         challengerRolls: [2, 3],
         opponentRolls: [5, 6],
         challengerTotal: 5,
-        opponentTotal: 11
+        opponentTotal: 11,
       };
       expect(resolveDice(game2)).toBe('opponent');
 
@@ -99,7 +99,7 @@ describe('Game Engines', () => {
         challengerRolls: [3, 4],
         opponentRolls: [2, 5],
         challengerTotal: 7,
-        opponentTotal: 7
+        opponentTotal: 7,
       };
       expect(resolveDice(game3)).toBe('tie');
     });
@@ -117,21 +117,21 @@ describe('Game Engines', () => {
       const gameHigh = {
         number: 75,
         challengerChoice: 'high',
-        opponentChoice: 'low'
+        opponentChoice: 'low',
       };
       expect(resolveHiLo(gameHigh)).toBe('challenger');
 
       const gameLow = {
         number: 25,
         challengerChoice: 'high',
-        opponentChoice: 'low'
+        opponentChoice: 'low',
       };
       expect(resolveHiLo(gameLow)).toBe('opponent');
 
       const gameTie = {
         number: 50,
         challengerChoice: 'high',
-        opponentChoice: 'low'
+        opponentChoice: 'low',
       };
       expect(resolveHiLo(gameTie)).toBe('tie');
     });
@@ -147,4 +147,3 @@ describe('Game Engines', () => {
     });
   });
 });
-

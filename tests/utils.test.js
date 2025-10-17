@@ -8,7 +8,7 @@ import {
   getMedalEmoji,
   exportToCSV,
   hasImageAttachment,
-  getFirstImageUrl
+  getFirstImageUrl,
 } from '../src/lib/utils.js';
 
 describe('Utility Functions', () => {
@@ -24,11 +24,11 @@ describe('Utility Functions', () => {
     it('should parse valid Discord message link', () => {
       const link = 'https://discord.com/channels/123456789/987654321/111222333';
       const result = parseMessageLink(link);
-      
+
       expect(result).toEqual({
         guildId: '123456789',
         channelId: '987654321',
-        messageId: '111222333'
+        messageId: '111222333',
       });
     });
 
@@ -95,8 +95,20 @@ describe('Utility Functions', () => {
   describe('exportToCSV', () => {
     it('should export users to CSV format', () => {
       const users = [
-        { discordId: '123', vp: 100, streakDays: 5, blacklisted: false, createdAt: new Date('2024-01-01') },
-        { discordId: '456', vp: 50, streakDays: 0, blacklisted: true, createdAt: new Date('2024-01-02') }
+        {
+          discordId: '123',
+          vp: 100,
+          streakDays: 5,
+          blacklisted: false,
+          createdAt: new Date('2024-01-01'),
+        },
+        {
+          discordId: '456',
+          vp: 50,
+          streakDays: 0,
+          blacklisted: true,
+          createdAt: new Date('2024-01-02'),
+        },
       ];
 
       const csv = exportToCSV(users);
@@ -117,14 +129,18 @@ describe('Utility Functions', () => {
         for (const item of items) {
           yield item;
         }
-      }
+      },
     });
 
     it('detects image attachments', () => {
-      const attachment = { name: 'photo.png', url: 'https://cdn.example.com/photo.png', contentType: 'image/png' };
+      const attachment = {
+        name: 'photo.png',
+        url: 'https://cdn.example.com/photo.png',
+        contentType: 'image/png',
+      };
       const message = {
         attachments: createAttachmentCollection([attachment]),
-        embeds: []
+        embeds: [],
       };
 
       expect(hasImageAttachment(message)).toBe(true);
@@ -134,7 +150,7 @@ describe('Utility Functions', () => {
     it('detects embedded images', () => {
       const message = {
         attachments: createAttachmentCollection([]),
-        embeds: [{ image: { url: 'https://imgur.example.com/vouch.jpg' } }]
+        embeds: [{ image: { url: 'https://imgur.example.com/vouch.jpg' } }],
       };
 
       expect(hasImageAttachment(message)).toBe(true);
@@ -144,7 +160,7 @@ describe('Utility Functions', () => {
     it('returns false when no images are present', () => {
       const message = {
         attachments: createAttachmentCollection([]),
-        embeds: []
+        embeds: [],
       };
 
       expect(hasImageAttachment(message)).toBe(false);
@@ -152,4 +168,3 @@ describe('Utility Functions', () => {
     });
   });
 });
-

@@ -80,10 +80,20 @@ export function isBust(hand) {
  */
 export function canSplit(hand) {
   if (hand.length !== 2) return false;
-  
-  const value1 = hand[0].rank === 'A' ? 11 : ['K', 'Q', 'J'].includes(hand[0].rank) ? 10 : parseInt(hand[0].rank);
-  const value2 = hand[1].rank === 'A' ? 11 : ['K', 'Q', 'J'].includes(hand[1].rank) ? 10 : parseInt(hand[1].rank);
-  
+
+  const value1 =
+    hand[0].rank === 'A'
+      ? 11
+      : ['K', 'Q', 'J'].includes(hand[0].rank)
+        ? 10
+        : parseInt(hand[0].rank);
+  const value2 =
+    hand[1].rank === 'A'
+      ? 11
+      : ['K', 'Q', 'J'].includes(hand[1].rank)
+        ? 10
+        : parseInt(hand[1].rank);
+
   return value1 === value2;
 }
 
@@ -92,14 +102,14 @@ export function canSplit(hand) {
  */
 export function shouldDealerHit(hand) {
   const value = calculateHandValue(hand);
-  
+
   if (value < 17) return true;
   if (value > 17) return false;
-  
+
   // Check for soft 17 (hand value is 17 with an ace counted as 11)
   let hasAce = false;
   let total = 0;
-  
+
   for (const card of hand) {
     if (card.rank === 'A') {
       hasAce = true;
@@ -110,10 +120,10 @@ export function shouldDealerHit(hand) {
       total += parseInt(card.rank);
     }
   }
-  
+
   // If we have soft 17 (ace + 6), hit
   if (total === 17 && hasAce) return true;
-  
+
   return false;
 }
 
@@ -122,10 +132,10 @@ export function shouldDealerHit(hand) {
  */
 export function createBlackjackGame(bet) {
   const deck = createDeck();
-  
+
   const playerHand = [deck.pop(), deck.pop()];
   const dealerHand = [deck.pop(), deck.pop()];
-  
+
   return {
     deck,
     playerHand,
@@ -133,7 +143,7 @@ export function createBlackjackGame(bet) {
     bet,
     doubled: false,
     split: false,
-    playerStand: false
+    playerStand: false,
   };
 }
 
@@ -175,22 +185,22 @@ export function playDealer(state) {
 export function determineResult(state) {
   const playerValue = calculateHandValue(state.playerHand);
   const dealerValue = calculateHandValue(state.dealerHand);
-  
+
   // Player bust
   if (isBust(state.playerHand)) {
     return { result: 'lose', payout: 0 };
   }
-  
+
   // Player blackjack
   if (isBlackjack(state.playerHand) && !isBlackjack(state.dealerHand)) {
     return { result: 'blackjack', payout: Math.floor(state.bet * 2.5) }; // 3:2 payout
   }
-  
+
   // Dealer bust
   if (isBust(state.dealerHand)) {
     return { result: 'win', payout: state.bet * 2 };
   }
-  
+
   // Compare values
   if (playerValue > dealerValue) {
     return { result: 'win', payout: state.bet * 2 };
@@ -200,4 +210,3 @@ export function determineResult(state) {
     return { result: 'push', payout: state.bet }; // Return bet
   }
 }
-

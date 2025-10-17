@@ -16,7 +16,7 @@ export async function execute(interaction) {
     // Check if user is blacklisted
     if (user.blacklisted) {
       return interaction.editReply({
-        content: '❌ You are blacklisted and cannot claim daily VP.'
+        content: '❌ You are blacklisted and cannot claim daily VP.',
       });
     }
 
@@ -33,7 +33,7 @@ export async function execute(interaction) {
         const minutesRemaining = Math.floor((timeRemaining % (60 * 60 * 1000)) / (60 * 1000));
 
         return interaction.editReply({
-          content: `⏰ You can claim your daily VP again in **${hoursRemaining}h ${minutesRemaining}m**.`
+          content: `⏰ You can claim your daily VP again in **${hoursRemaining}h ${minutesRemaining}m**.`,
         });
       }
     }
@@ -55,17 +55,16 @@ export async function execute(interaction) {
       where: { id: user.id },
       data: {
         lastDailyAt: new Date(),
-        ...(success && { vp: { increment: amount } })
-      }
+        ...(success && { vp: { increment: amount } }),
+      },
     });
 
     // Create embed
-    const embed = new EmbedBuilder()
-      .setTimestamp();
+    const embed = new EmbedBuilder().setTimestamp();
 
     if (success) {
       embed
-        .setColor(0x00FF00)
+        .setColor(0x00ff00)
         .setTitle('🎉 Daily Claim Success!')
         .setDescription(`You won **${formatVP(amount)}**!`)
         .addFields(
@@ -74,7 +73,7 @@ export async function execute(interaction) {
         );
     } else {
       embed
-        .setColor(0xFF9900)
+        .setColor(0xff9900)
         .setTitle('😔 Daily Claim Failed')
         .setDescription('Better luck next time!')
         .addFields(
@@ -90,15 +89,13 @@ export async function execute(interaction) {
       await logTransaction('daily', {
         userId: interaction.user.id,
         amount,
-        success: true
+        success: true,
       });
     }
-
   } catch (error) {
     console.error('Error in daily command:', error);
     await interaction.editReply({
-      content: '❌ Failed to claim daily VP. Please try again.'
+      content: '❌ Failed to claim daily VP. Please try again.',
     });
   }
 }
-

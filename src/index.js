@@ -21,8 +21,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
-  ]
+    GatewayIntentBits.GuildMembers,
+  ],
 });
 
 // Store commands in collection
@@ -33,12 +33,12 @@ client.commands = new Collection();
  */
 async function loadCommands() {
   const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
 
   for (const file of commandFiles) {
     const filePath = join(commandsPath, file);
     const command = await import(`file://${filePath}`);
-    
+
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
       console.log(`✅ Loaded command: ${command.data.name}`);
@@ -53,18 +53,18 @@ async function loadCommands() {
  */
 async function loadEvents() {
   const eventsPath = join(__dirname, 'events');
-  const eventFiles = readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+  const eventFiles = readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 
   for (const file of eventFiles) {
     const filePath = join(eventsPath, file);
     const event = await import(`file://${filePath}`);
-    
+
     if (event.once) {
       client.once(event.name, (...args) => event.execute(...args));
     } else {
       client.on(event.name, (...args) => event.execute(...args));
     }
-    
+
     console.log(`✅ Loaded event: ${event.name}`);
   }
 }
@@ -74,7 +74,7 @@ async function loadEvents() {
  */
 async function registerCommands() {
   const commands = [];
-  
+
   for (const command of client.commands.values()) {
     commands.push(command.data.toJSON());
   }
@@ -86,20 +86,13 @@ async function registerCommands() {
 
     // Guild-specific registration (faster for development)
     if (process.env.GUILD_ID) {
-      await rest.put(
-        Routes.applicationGuildCommands(
-          client.user.id,
-          process.env.GUILD_ID
-        ),
-        { body: commands }
-      );
+      await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), {
+        body: commands,
+      });
       console.log('✅ Successfully registered guild commands');
     } else {
       // Global registration (takes up to 1 hour to propagate)
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commands }
-      );
+      await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
       console.log('✅ Successfully registered global commands');
     }
   } catch (error) {
@@ -131,7 +124,7 @@ async function init() {
 // Handle bot ready event
 client.once('ready', async () => {
   console.log(`🚀 Bot is online as ${client.user.tag}`);
-  
+
   // Register commands
   await registerCommands();
 
@@ -167,7 +160,7 @@ client.on('interactionCreate', async (interaction) => {
 
       const errorMessage = {
         content: '❌ There was an error executing this command!',
-        ephemeral: true
+        ephemeral: true,
       };
 
       if (interaction.replied || interaction.deferred) {
@@ -193,7 +186,7 @@ client.on('interactionCreate', async (interaction) => {
 
     const battlePrefixes = ['battle_', 'rps_', 'hilow_', 'reaction_'];
 
-    if (battlePrefixes.some(prefix => customId.startsWith(prefix))) {
+    if (battlePrefixes.some((prefix) => customId.startsWith(prefix))) {
       try {
         await handleBattleInteraction(interaction);
       } catch (error) {
@@ -231,4 +224,3 @@ process.on('unhandledRejection', (error) => {
 init();
 
 export default client;
-
