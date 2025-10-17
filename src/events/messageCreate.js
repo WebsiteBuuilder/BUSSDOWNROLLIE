@@ -74,23 +74,6 @@ export async function execute(message) {
         return incrementedUser;
       });
 
-      // DM user confirmation
-      try {
-        await message.author.send({
-          embeds: [
-            {
-              color: 0x00ff00,
-              title: '✅ Vouch Approved!',
-              description: 'Thanks for the vouch! +1 VP',
-              fields: [{ name: 'New Balance', value: `${updatedUser.vp} VP 💰`, inline: true }],
-              timestamp: new Date().toISOString(),
-            },
-          ],
-        });
-      } catch (error) {
-        console.log('Could not DM user:', error.message);
-      }
-
       // Send confirmation in channel
       await message.react('✅');
 
