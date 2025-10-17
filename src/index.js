@@ -7,6 +7,7 @@ import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
 import { handleBattleInteraction } from './commands/battle.js';
 import { handleBlackjackInteraction } from './commands/blackjack.js';
+import { handleApproveVouchButton } from './commands/approvevouch.js';
 
 // Load environment variables
 config();
@@ -174,6 +175,15 @@ client.on('interactionCreate', async (interaction) => {
 
   if (interaction.isButton()) {
     const customId = interaction.customId ?? '';
+
+    if (customId.startsWith('approvevouch:')) {
+      try {
+        await handleApproveVouchButton(interaction);
+      } catch (error) {
+        console.error('Error handling approvevouch interaction:', error);
+      }
+      return;
+    }
 
     if (customId.startsWith('bj_')) {
       try {

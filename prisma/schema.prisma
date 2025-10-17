@@ -35,6 +35,8 @@ model Vouch {
   userId                Int
   user                  User     @relation(fields: [userId], references: [id])
   imageUrl              String
+  channelId             String?
+  guildId               String?
   createdAt             DateTime @default(now())
   providerMentioned     Boolean
   status                String   // 'auto', 'approved', 'rejected', 'pending'

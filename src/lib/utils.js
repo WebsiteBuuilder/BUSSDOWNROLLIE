@@ -27,6 +27,17 @@ export function parseMessageLink(link) {
   };
 }
 
+/**
+ * Build a Discord message link from identifiers
+ */
+export function buildMessageLink(guildId, channelId, messageId) {
+  if (!guildId || !channelId || !messageId) {
+    return null;
+  }
+
+  return `https://discord.com/channels/${guildId}/${channelId}/${messageId}`;
+}
+
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
 
 function normalizeAttachments(attachments) {

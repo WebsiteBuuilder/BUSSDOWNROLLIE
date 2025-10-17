@@ -39,7 +39,9 @@ async function main() {
       userId: user1.id,
       imageUrl: 'https://example.com/food1.jpg',
       providerMentioned: false,
-      status: 'pending'
+      status: 'pending',
+      channelId: '800000000000000001',
+      guildId: '700000000000000001'
     }
   });
 
@@ -49,7 +51,9 @@ async function main() {
       userId: user2.id,
       imageUrl: 'https://example.com/food2.jpg',
       providerMentioned: false,
-      status: 'pending'
+      status: 'pending',
+      channelId: '800000000000000002',
+      guildId: '700000000000000001'
     }
   });
 
