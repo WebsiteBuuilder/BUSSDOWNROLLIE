@@ -312,12 +312,6 @@ In the Bot section, enable:
 ## 🧪 Testing
 
 ```bash
-# Run ESLint across src/ and tests/
-npm run lint
-
-# Check formatting with Prettier
-npm run format
-
 # Run all unit tests once
 npm test
 
@@ -404,7 +398,7 @@ Use this runbook before deploying changes:
 - [ ] Blackjack works inside threads that belong to the casino channel.
 - [ ] DMs are rejected with an ephemeral explanation.
 - [ ] Logs contain no “undefined channel to play in” errors or unhandled promise rejections.
-- [ ] `npm run lint`, `npm run format`, and `npm test` complete without failures.
+- [ ] `npm test` completes without failures.
 - **Audit Trail**: Complete logging of all VP changes
 
 ## 📝 Troubleshooting
