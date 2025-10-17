@@ -65,6 +65,33 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((subcommand) =>
     subcommand
+      .setName('dailychance')
+      .setDescription("Adjust a user's daily win odds")
+      .addUserOption((option) =>
+        option.setName('user').setDescription('User to update').setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('action')
+          .setDescription('How to apply the change')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Add', value: 'add' },
+            { name: 'Remove', value: 'remove' },
+            { name: 'Set', value: 'set' }
+          )
+      )
+      .addNumberOption((option) =>
+        option
+          .setName('amount')
+          .setDescription('Percentage points to adjust (e.g., 5 for 5%)')
+          .setRequired(true)
+          .setMinValue(-100)
+          .setMaxValue(100)
+      )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
       .setName('config')
       .setDescription('View or update bot configuration')
       .addStringOption((option) =>
@@ -123,6 +150,9 @@ export async function execute(interaction) {
       break;
     case 'unblacklist':
       await handleUnblacklist(interaction);
+      break;
+    case 'dailychance':
+      await handleDailyChance(interaction);
       break;
     case 'config':
       await handleConfig(interaction);
@@ -429,6 +459,115 @@ async function handleUnblacklist(interaction) {
     console.error('Error in admin unblacklist:', error);
     await interaction.editReply({
       content: '❌ Failed to unblacklist user. Please try again.',
+    });
+  }
+}
+
+async function handleDailyChance(interaction) {
+  const targetUser = interaction.options.getUser('user');
+  const action = interaction.options.getString('action');
+  const amount = interaction.options.getNumber('amount');
+
+  if (!['add', 'remove', 'set'].includes(action)) {
+    return interaction.reply({
+      content: '❌ Invalid action. Please choose add, remove, or set.',
+      ephemeral: true,
+    });
+  }
+
+  if (action !== 'set' && (!Number.isFinite(amount) || amount <= 0)) {
+    return interaction.reply({
+      content: '❌ Please provide a positive amount to adjust.',
+      ephemeral: true,
+    });
+  }
+
+  if (action === 'set' && !Number.isFinite(amount)) {
+    return interaction.reply({
+      content: '❌ Please provide a numeric amount to set.',
+      ephemeral: true,
+    });
+  }
+
+  try {
+    await interaction.deferReply();
+
+    const user = await getOrCreateUser(targetUser.id);
+    const currentModifier = Number.isFinite(user.dailyChanceModifier) ? user.dailyChanceModifier : 0;
+    const adjustment = (amount ?? 0) / 100;
+
+    let desiredModifier;
+    if (action === 'add') {
+      desiredModifier = currentModifier + adjustment;
+    } else if (action === 'remove') {
+      desiredModifier = currentModifier - adjustment;
+    } else {
+      desiredModifier = adjustment;
+    }
+
+    const clampedModifier = Math.max(-1, Math.min(1, desiredModifier));
+    const appliedChange = clampedModifier - currentModifier;
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { dailyChanceModifier: clampedModifier },
+    });
+
+    const baseChanceStr = await getConfig('daily_rng_chance', '0.10');
+    const parsedBaseChance = parseFloat(baseChanceStr);
+    const baseChance = Number.isFinite(parsedBaseChance) ? parsedBaseChance : 0.1;
+    const previousChance = Math.min(Math.max(baseChance + currentModifier, 0), 1);
+    const finalChance = Math.min(Math.max(baseChance + clampedModifier, 0), 1);
+
+    const embed = new EmbedBuilder()
+      .setColor(appliedChange > 0 ? 0x00ff00 : appliedChange < 0 ? 0xff9900 : 0x5865f2)
+      .setTitle('🎯 Daily Chance Updated')
+      .addFields(
+        { name: 'User', value: `<@${targetUser.id}>`, inline: true },
+        {
+          name: 'Change Applied',
+          value: `${appliedChange >= 0 ? '+' : ''}${(appliedChange * 100).toFixed(2)}%`,
+          inline: true,
+        },
+        {
+          name: 'Modifier',
+          value: `${(clampedModifier * 100).toFixed(2)}%`,
+          inline: true,
+        },
+        {
+          name: 'New Odds',
+          value: `${(finalChance * 100).toFixed(2)}%`,
+          inline: true,
+        },
+        {
+          name: 'Previous Odds',
+          value: `${(previousChance * 100).toFixed(2)}%`,
+          inline: true,
+        }
+      )
+      .setFooter({ text: `Admin: ${interaction.user.username}` })
+      .setTimestamp();
+
+    const descriptionParts = [`Base odds are ${(baseChance * 100).toFixed(2)}%.`];
+    if (desiredModifier !== clampedModifier) {
+      descriptionParts.push('⚠️ Change was clamped between -100% and +100%.');
+    }
+
+    embed.setDescription(descriptionParts.join('\n'));
+
+    await interaction.editReply({ embeds: [embed] });
+
+    await logTransaction('admin', {
+      adminId: interaction.user.id,
+      action: 'Adjust Daily Chance',
+      targetUserId: targetUser.id,
+      changePercent: appliedChange * 100,
+      finalModifierPercent: clampedModifier * 100,
+    });
+  } catch (error) {
+    console.error('Error adjusting daily chance:', error);
+    await interaction.editReply({
+      content: '❌ Failed to update daily chance. Please try again.',
     });
   }
 }

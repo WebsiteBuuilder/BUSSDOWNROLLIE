@@ -11,7 +11,7 @@ export async function initializeDatabase() {
   const defaultConfig = {
     cooldown_hours: '0',
     require_provider_approval: 'true',
-    daily_rng_chance: '0.35',
+    daily_rng_chance: '0.10',
     five_cost: '25',
     free_cost: '60',
     transfer_fee_percent: '5',
