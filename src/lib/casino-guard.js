@@ -1,4 +1,4 @@
-import { ChannelType } from 'discord.js';
+import { ChannelType, MessageFlags } from 'discord.js';
 
 import { logBlackjackEvent } from './blackjack-telemetry.js';
 import { getEnvVar } from './env.js';
@@ -22,7 +22,12 @@ function findCachedCasinoChannel(interaction) {
 }
 
 async function respondEphemeral(interaction, message) {
-  const payload = typeof message === 'string' ? { content: message, ephemeral: true } : message;
+  const basePayload = typeof message === 'string' ? { content: message } : message;
+  const { ephemeral, flags, ...rest } = basePayload ?? {};
+  const payload = {
+    ...rest,
+    flags: (flags ?? 0) | MessageFlags.Ephemeral,
+  };
 
   if (interaction.replied || interaction.deferred) {
     try {

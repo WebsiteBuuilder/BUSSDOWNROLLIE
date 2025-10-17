@@ -1,4 +1,4 @@
-import { Client, Collection, GatewayIntentBits, REST, Routes } from 'discord.js';
+import { Client, Collection, Events, GatewayIntentBits, MessageFlags, REST, Routes } from 'discord.js';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -123,7 +123,7 @@ async function init() {
 }
 
 // Handle bot ready event
-client.once('ready', async () => {
+client.once(Events.ClientReady, async () => {
   console.log(`🚀 Bot is online as ${client.user.tag}`);
 
   // Register commands
@@ -161,7 +161,7 @@ client.on('interactionCreate', async (interaction) => {
 
       const errorMessage = {
         content: '❌ There was an error executing this command!',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       };
 
       if (interaction.replied || interaction.deferred) {

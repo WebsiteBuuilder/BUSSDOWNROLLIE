@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getOrCreateUser, transferVP, getConfig } from '../db/index.js';
 import { calculateTransferFee, formatVP } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -22,14 +22,14 @@ export async function execute(interaction) {
   if (recipient.bot) {
     return interaction.reply({
       content: '❌ You cannot send VP to bots.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
   if (recipient.id === sender.id) {
     return interaction.reply({
       content: '❌ You cannot send VP to yourself.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 

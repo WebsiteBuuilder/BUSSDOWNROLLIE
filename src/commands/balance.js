@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getOrCreateUser } from '../db/index.js';
 import { formatVP } from '../lib/utils.js';
 
@@ -38,7 +38,7 @@ export async function execute(interaction) {
     console.error('Error in balance command:', error);
     await interaction.reply({
       content: '❌ Failed to fetch balance. Please try again.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 }

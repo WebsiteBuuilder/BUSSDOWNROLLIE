@@ -4,6 +4,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
 } from 'discord.js';
 
 import prisma, { getOrCreateUser, hasActiveBlackjack, getConfig } from '../db/index.js';
@@ -23,6 +24,14 @@ import {
   canSplit,
   determineResult,
 } from '../lib/blackjack.js';
+
+function ephemeral(options = {}) {
+  const { flags, ...rest } = options ?? {};
+  return {
+    ...rest,
+    flags: (flags ?? 0) | MessageFlags.Ephemeral,
+  };
+}
 
 export const data = new SlashCommandBuilder()
   .setName('blackjack')
@@ -99,11 +108,12 @@ export async function execute(interaction, _client) {
   const userId = interaction.user.id;
 
   if (getActiveGame(userId)) {
-    return interaction.reply({
-      content:
-        '❌ You already have an active blackjack game. Use /blackjack cancel to end it first.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content:
+          '❌ You already have an active blackjack game. Use /blackjack cancel to end it first.',
+      })
+    );
   }
 
   try {
@@ -208,10 +218,11 @@ export async function execute(interaction, _client) {
           });
 
           try {
-            await interaction.followUp({
-              content: '⌛ No response detected in time. Auto-standing your hand.',
-              ephemeral: true,
-            });
+            await interaction.followUp(
+              ephemeral({
+                content: '⌛ No response detected in time. Auto-standing your hand.',
+              })
+            );
           } catch (followUpError) {
             logBlackjackEvent('game.timeout.followup_error', {
               userId,
@@ -255,17 +266,18 @@ export async function execute(interaction, _client) {
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply(payload);
     } else {
-      await interaction.reply({ ...payload, ephemeral: true });
+      await interaction.reply(ephemeral(payload));
     }
   }
 }
 
 async function cancelBlackjack(interaction) {
   if (!interaction.guildId) {
-    return interaction.reply({
-      content: '❌ This command can only be used inside the server.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ This command can only be used inside the server.',
+      })
+    );
   }
 
   const userId = interaction.user.id;
@@ -284,10 +296,11 @@ async function cancelBlackjack(interaction) {
 
     if (!activeRound) {
       clearActiveGame(userId);
-      return interaction.reply({
-        content: '✅ You do not have an active blackjack game.',
-        ephemeral: true,
-      });
+      return interaction.reply(
+        ephemeral({
+          content: '✅ You do not have an active blackjack game.',
+        })
+      );
     }
 
     clearActiveGame(userId);
@@ -311,10 +324,11 @@ async function cancelBlackjack(interaction) {
       roundId: activeRound.id,
     });
 
-    return interaction.reply({
-      content: '✅ Your blackjack game was cancelled and your bet was refunded.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '✅ Your blackjack game was cancelled and your bet was refunded.',
+      })
+    );
   } catch (error) {
     logBlackjackEvent('game.cancel_error', {
       userId,
@@ -323,16 +337,18 @@ async function cancelBlackjack(interaction) {
     console.error('Error cancelling blackjack game:', error);
 
     if (interaction.replied || interaction.deferred) {
-      return interaction.followUp({
-        content: '❌ Failed to cancel your blackjack game. Please try again.',
-        ephemeral: true,
-      });
+      return interaction.followUp(
+        ephemeral({
+          content: '❌ Failed to cancel your blackjack game. Please try again.',
+        })
+      );
     }
 
-    return interaction.reply({
-      content: '❌ Failed to cancel your blackjack game. Please try again.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ Failed to cancel your blackjack game. Please try again.',
+      })
+    );
   }
 }
 
@@ -462,10 +478,11 @@ export async function handleBlackjackInteraction(interaction) {
         roundId,
         action,
       });
-      return interaction.reply({
-        content: '❌ Game not found.',
-        ephemeral: true,
-      });
+      return interaction.reply(
+        ephemeral({
+          content: '❌ Game not found.',
+        })
+      );
     }
 
     // Only the player can interact
@@ -475,10 +492,11 @@ export async function handleBlackjackInteraction(interaction) {
         roundId,
         action,
       });
-      return interaction.reply({
-        content: '❌ This is not your game.',
-        ephemeral: true,
-      });
+      return interaction.reply(
+        ephemeral({
+          content: '❌ This is not your game.',
+        })
+      );
     }
 
     // Game already resolved
@@ -489,10 +507,11 @@ export async function handleBlackjackInteraction(interaction) {
         action,
         result: round.result,
       });
-      return interaction.reply({
-        content: '❌ This game has already ended.',
-        ephemeral: true,
-      });
+      return interaction.reply(
+        ephemeral({
+          content: '❌ This game has already ended.',
+        })
+      );
     }
 
     await interaction.deferUpdate();
@@ -530,10 +549,11 @@ export async function handleBlackjackInteraction(interaction) {
       case 'double':
         // Check balance
         if (round.user.vp < gameState.bet) {
-          return interaction.followUp({
-            content: '❌ Insufficient balance to double down.',
-            ephemeral: true,
-          });
+          return interaction.followUp(
+            ephemeral({
+              content: '❌ Insufficient balance to double down.',
+            })
+          );
         }
 
         gameState = doubleDown(gameState);
@@ -555,10 +575,11 @@ export async function handleBlackjackInteraction(interaction) {
       action,
       error: error.message,
     });
-    await interaction.followUp({
-      content: '❌ An error occurred. Please try again.',
-      ephemeral: true,
-    });
+    await interaction.followUp(
+      ephemeral({
+        content: '❌ An error occurred. Please try again.',
+      })
+    );
   }
 }
 

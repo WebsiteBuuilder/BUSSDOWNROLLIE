@@ -1,5 +1,12 @@
 import { randomUUID } from 'crypto';
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+} from 'discord.js';
 import prisma, { getOrCreateUser, hasActiveBattle, getConfig } from '../db/index.js';
 import { formatVP, calculateBattleRake } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -65,6 +72,14 @@ function getBattleMenuState(menuId) {
 
 function clearBattleMenuState(menuId) {
   battleMenuState.delete(menuId);
+}
+
+function ephemeral(options = {}) {
+  const { flags, ...rest } = options ?? {};
+  return {
+    ...rest,
+    flags: (flags ?? 0) | MessageFlags.Ephemeral,
+  };
 }
 
 async function getUserDisplayName(client, discordId) {
@@ -144,12 +159,12 @@ async function notifyInactiveBattleMenu(interaction) {
       if (interaction.isMessageComponent()) {
         await interaction.update(payload);
       } else {
-        await interaction.reply({ content: payload.content, ephemeral: true });
+        await interaction.reply(ephemeral({ content: payload.content }));
       }
       return;
     } catch (error) {
       try {
-        await interaction.reply({ content: payload.content, ephemeral: true });
+        await interaction.reply(ephemeral({ content: payload.content }));
         return;
       } catch (replyError) {
         console.error('Failed to notify about inactive battle menu:', replyError);
@@ -158,7 +173,7 @@ async function notifyInactiveBattleMenu(interaction) {
   }
 
   try {
-    await interaction.followUp({ content: payload.content, ephemeral: true });
+    await interaction.followUp(ephemeral({ content: payload.content }));
   } catch (followError) {
     console.error('Failed to send follow-up for inactive battle menu:', followError);
   }
@@ -173,10 +188,11 @@ async function handleBattleMenuButton(interaction, menuId, action) {
   }
 
   if (interaction.user.id !== state.challengerId) {
-    await interaction.reply({
-      content: '❌ Only the original challenger can use this menu.',
-      ephemeral: true,
-    });
+    await interaction.reply(
+      ephemeral({
+        content: '❌ Only the original challenger can use this menu.',
+      })
+    );
     return true;
   }
 
@@ -193,10 +209,11 @@ async function handleBattleMenuButton(interaction, menuId, action) {
   }
 
   if (!interaction.channel) {
-    await interaction.reply({
-      content: '❌ Unable to locate the channel for this challenge. Try again in a guild channel.',
-      ephemeral: true,
-    });
+    await interaction.reply(
+      ephemeral({
+        content: '❌ Unable to locate the channel for this challenge. Try again in a guild channel.',
+      })
+    );
     return true;
   }
 
@@ -238,7 +255,7 @@ async function handleBattleMenuButton(interaction, menuId, action) {
     const message = error instanceof Error ? error.message : 'Failed to create battle. Please try again.';
 
     try {
-      await interaction.followUp({ content: `❌ ${message}`, ephemeral: true });
+      await interaction.followUp(ephemeral({ content: `❌ ${message}` }));
     } catch (followError) {
       console.error('Failed to send follow-up error message for battle challenge:', followError);
     }
@@ -378,31 +395,35 @@ export async function execute(interaction, _client) {
   const amount = amountOption ?? 1;
 
   if (amount < 1 || amount > 50) {
-    return interaction.reply({
-      content: '❌ Wager amount must be between 1 and 50 VP.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ Wager amount must be between 1 and 50 VP.',
+      })
+    );
   }
 
   if (!opponent) {
-    return interaction.reply({
-      content: '❌ Please choose an opponent to challenge.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ Please choose an opponent to challenge.',
+      })
+    );
   }
 
   if (opponent.bot) {
-    return interaction.reply({
-      content: '❌ You cannot challenge bots to battles.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ You cannot challenge bots to battles.',
+      })
+    );
   }
 
   if (opponent.id === challenger.id) {
-    return interaction.reply({
-      content: '❌ You cannot challenge yourself.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ You cannot challenge yourself.',
+      })
+    );
   }
 
   const menuId = randomUUID();
@@ -410,12 +431,13 @@ export async function execute(interaction, _client) {
   const embed = buildBattleMenuEmbed({ challenger, opponent, amount });
   const components = buildBattleMenuComponents(menuId);
 
-  const reply = await interaction.reply({
-    embeds: [embed],
-    components,
-    ephemeral: true,
-    fetchReply: true,
-  });
+  await interaction.reply(
+    ephemeral({
+      embeds: [embed],
+      components,
+    })
+  );
+  const reply = await interaction.fetchReply();
 
   saveBattleMenuState(menuId, {
     challengerId: challenger.id,
@@ -458,27 +480,30 @@ export async function handleBattleInteraction(interaction) {
       });
 
       if (!battle) {
-        await interaction.reply({
-          content: '❌ Battle not found.',
-          ephemeral: true,
-        });
+        await interaction.reply(
+          ephemeral({
+            content: '❌ Battle not found.',
+          })
+        );
         return true;
       }
 
       // Only opponent can respond
       if (interaction.user.id !== battle.opponent.discordId) {
-        await interaction.reply({
-          content: '❌ Only the challenged user can respond.',
-          ephemeral: true,
-        });
+        await interaction.reply(
+          ephemeral({
+            content: '❌ Only the challenged user can respond.',
+          })
+        );
         return true;
       }
 
       if (battle.status !== 'open') {
-        await interaction.reply({
-          content: '❌ This battle is no longer available.',
-          ephemeral: true,
-        });
+        await interaction.reply(
+          ephemeral({
+            content: '❌ This battle is no longer available.',
+          })
+        );
         return true;
       }
 
@@ -511,10 +536,11 @@ export async function handleBattleInteraction(interaction) {
       return true;
     } catch (error) {
       console.error('Error handling battle button:', error);
-      await interaction.reply({
-        content: '❌ An error occurred. Please try again.',
-        ephemeral: true,
-      });
+      await interaction.reply(
+        ephemeral({
+          content: '❌ An error occurred. Please try again.',
+        })
+      );
       return true;
     }
   }
@@ -620,10 +646,11 @@ async function handleRPSButton(interaction) {
   });
 
   if (!battle || battle.status === 'resolved') {
-    return interaction.reply({
-      content: '❌ This battle is no longer active.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ This battle is no longer active.',
+      })
+    );
   }
 
   const gameState = JSON.parse(battle.state);
@@ -632,31 +659,35 @@ async function handleRPSButton(interaction) {
   // Determine if user is challenger or opponent
   if (userId === battle.challenger.discordId) {
     if (gameState.challengerChoice) {
-      return interaction.reply({
-        content: '❌ You already made your choice!',
-        ephemeral: true,
-      });
+      return interaction.reply(
+        ephemeral({
+          content: '❌ You already made your choice!',
+        })
+      );
     }
     gameState.challengerChoice = choice;
   } else if (userId === battle.opponent.discordId) {
     if (gameState.opponentChoice) {
-      return interaction.reply({
-        content: '❌ You already made your choice!',
-        ephemeral: true,
-      });
+      return interaction.reply(
+        ephemeral({
+          content: '❌ You already made your choice!',
+        })
+      );
     }
     gameState.opponentChoice = choice;
   } else {
-    return interaction.reply({
-      content: '❌ You are not part of this battle.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ You are not part of this battle.',
+      })
+    );
   }
 
-  await interaction.reply({
-    content: `✅ You chose **${choice}**!`,
-    ephemeral: true,
-  });
+  await interaction.reply(
+    ephemeral({
+      content: `✅ You chose **${choice}**!`,
+    })
+  );
 
   // Check if both players have chosen
   if (gameState.challengerChoice && gameState.opponentChoice) {
@@ -804,10 +835,11 @@ async function handleHiLoButton(interaction) {
   });
 
   if (!battle) {
-    return interaction.reply({
-      content: '❌ Battle not found.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ Battle not found.',
+      })
+    );
   }
 
   const gameState = JSON.parse(battle.state);
@@ -964,10 +996,11 @@ async function handleReactionButton(interaction) {
   });
 
   if (!battle || battle.status !== 'accepted') {
-    return interaction.reply({
-      content: '❌ This battle is no longer active.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ This battle is no longer active.',
+      })
+    );
   }
 
   const gameState = JSON.parse(battle.state);
@@ -980,10 +1013,11 @@ async function handleReactionButton(interaction) {
   } else if (userId === battle.opponent.discordId) {
     gameState.clickedAt.opponent = clickTime;
   } else {
-    return interaction.reply({
-      content: '❌ You are not part of this battle.',
-      ephemeral: true,
-    });
+    return interaction.reply(
+      ephemeral({
+        content: '❌ You are not part of this battle.',
+      })
+    );
   }
 
   await prisma.battle.update({
@@ -991,10 +1025,11 @@ async function handleReactionButton(interaction) {
     data: { state: JSON.stringify(gameState) },
   });
 
-  await interaction.reply({
-    content: `⚡ You clicked in **${clickTime}ms**!`,
-    ephemeral: true,
-  });
+  await interaction.reply(
+    ephemeral({
+      content: `⚡ You clicked in **${clickTime}ms**!`,
+    })
+  );
 
   // Check if both have clicked
   if (gameState.clickedAt.challenger && gameState.clickedAt.opponent) {
