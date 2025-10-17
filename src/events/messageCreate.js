@@ -1,4 +1,4 @@
-import { hasImageAttachment, getFirstImageUrl, mentionsRole } from '../lib/utils.js';
+import { hasImageAttachment, getFirstImageUrl } from '../lib/utils.js';
 import prisma, { getOrCreateUser } from '../db/index.js';
 import { logTransaction } from '../lib/logger.js';
 
@@ -46,11 +46,26 @@ export async function execute(message) {
 
     const providerRoleId = process.env.PROVIDER_ROLE_ID;
 
-    // Check if provider role or a member with the provider role was mentioned
-    const providerMentioned = providerRoleId
-      ? mentionsRole(message, providerRoleId) ||
-        message.mentions.members?.some((member) => member.roles.cache.has(providerRoleId))
-      : false;
+    const mentions = message.mentions ?? {};
+
+    const hasAnyMention =
+      (mentions.users?.size ?? 0) > 0 ||
+      (mentions.roles?.size ?? 0) > 0 ||
+      Boolean(mentions.everyone);
+
+    let providerRoleMentioned = false;
+    if (providerRoleId) {
+      const memberHasRole =
+        typeof mentions.members?.some === 'function'
+          ? mentions.members.some((member) => member?.roles?.cache?.has?.(providerRoleId))
+          : false;
+      const roleCollectionHasRole =
+        typeof mentions.roles?.has === 'function' ? mentions.roles.has(providerRoleId) : false;
+
+      providerRoleMentioned = memberHasRole || roleCollectionHasRole;
+    }
+
+    const providerMentioned = hasAnyMention || providerRoleMentioned;
     const imageUrl = getFirstImageUrl(message);
 
     if (providerMentioned) {
@@ -68,6 +83,8 @@ export async function execute(message) {
             imageUrl,
             providerMentioned: true,
             status: 'auto',
+            channelId: message.channel.id,
+            guildId: message.guildId,
           },
         });
 
@@ -93,6 +110,8 @@ export async function execute(message) {
           imageUrl,
           providerMentioned: false,
           status: 'pending',
+          channelId: message.channel.id,
+          guildId: message.guildId,
         },
       });
 
@@ -105,7 +124,7 @@ export async function execute(message) {
       // Reply with instruction
       await message.reply({
         content:
-          '⏳ Please @ a provider to validate your vouch, or wait for manual approval with `/approvevouch`.',
+          '⏳ Please @ a provider you ordered from, or wait for manual approval with `/approvevouch`.',
         allowedMentions: { repliedUser: true },
       });
     }

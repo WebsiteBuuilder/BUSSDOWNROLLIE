@@ -242,7 +242,7 @@ cp data/guhdeats.db data/backup-$(date +%Y%m%d).db
 
 | Command                           | Description                 |
 | --------------------------------- | --------------------------- |
-| `/approvevouch <message_link>`    | Manually approve a vouch    |
+| `/approvevouch`                   | Review & approve vouches    |
 | `/redeem fulfill <redemption_id>` | Mark redemption as complete |
 
 ### Admin Commands
@@ -326,18 +326,18 @@ npx vitest run tests/blackjack.command.test.js
 
 1. **User posts in #vouch**
    - Must contain at least one image
-   - Must mention a user with PROVIDER_ROLE_ID
+   - Adding an `@` mention of their provider triggers instant approval
 
-2. **Auto-approval (with @Provider)**
+2. **Auto-approval (with @ mention)**
    - Instantly credits +1 VP
    - Creates vouch record with status='auto'
    - DMs user confirmation
    - Logs to audit channel
 
-3. **Manual approval (no @Provider)**
+3. **Manual approval (no @ mention)**
    - Creates vouch record with status='pending'
-   - Provider uses `/approvevouch <message_link>` to approve
-   - Credits +1 VP on approval
+   - Provider opens `/approvevouch` to review pending entries
+   - Approving from the list credits +1 VP
 
 4. **Anti-abuse**
    - Ignores duplicate messages

@@ -73,17 +73,11 @@ Creates a private ticket with providers.
 
 ### Vouch Management
 ```
-/approvevouch <message_link>
+/approvevouch
 ```
-Manually approve a pending vouch. Credits +1 VP to the user.
+Open an interactive list of pending vouches. Click the button next to a vouch to approve it and credit +1 VP to the user.
 
-**How to get message link:**
-Right-click message → Copy Message Link
-
-**Example:**
-```
-/approvevouch https://discord.com/channels/123/456/789
-```
+> 💡 Users who include an `@` mention in their vouch post are approved automatically. Only vouches without a mention require manual approval.
 
 ### Redemption Management
 ```

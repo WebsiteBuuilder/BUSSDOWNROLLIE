@@ -72,7 +72,7 @@ Features:
 - [x] `/admin export` - Export data as CSV
 
 ### Provider Commands ✅
-- [x] `/approvevouch` - Manually approve pending vouches
+- [x] `/approvevouch` - Review pending vouches and approve them from an interactive list
 - [x] `/redeem fulfill` - Mark redemptions as complete
 
 ### User Commands ✅
