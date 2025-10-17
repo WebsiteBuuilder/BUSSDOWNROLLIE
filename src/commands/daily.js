@@ -39,12 +39,15 @@ export async function execute(interaction) {
     }
 
     // Get RNG chance from config
-    const chanceStr = await getConfig('daily_rng_chance', '0.35');
-    const chance = parseFloat(chanceStr);
+    const chanceStr = await getConfig('daily_rng_chance', '0.10');
+    const parsedBaseChance = parseFloat(chanceStr);
+    const baseChance = Number.isFinite(parsedBaseChance) ? parsedBaseChance : 0.1;
+    const modifier = Number.isFinite(user.dailyChanceModifier) ? user.dailyChanceModifier : 0;
+    const finalChance = Math.min(Math.max(baseChance + modifier, 0), 1);
 
     // Roll RNG
     const roll = Math.random();
-    const success = roll < chance;
+    const success = roll < finalChance;
 
     // Get daily amount from config
     const amountStr = await getConfig('daily_amount', '1');
@@ -62,24 +65,31 @@ export async function execute(interaction) {
     // Create embed
     const embed = new EmbedBuilder().setTimestamp();
 
+    const oddsFields = [
+      { name: 'Final Odds', value: `${(finalChance * 100).toFixed(2)}%`, inline: true },
+      { name: 'Base Odds', value: `${(baseChance * 100).toFixed(2)}%`, inline: true },
+    ];
+
+    if (modifier !== 0) {
+      oddsFields.push({
+        name: 'Modifier',
+        value: `${modifier >= 0 ? '+' : ''}${(modifier * 100).toFixed(2)}%`,
+        inline: true,
+      });
+    }
+
     if (success) {
       embed
         .setColor(0x00ff00)
         .setTitle('🎉 Daily Claim Success!')
         .setDescription(`You won **${formatVP(amount)}**!`)
-        .addFields(
-          { name: 'Odds', value: `${(chance * 100).toFixed(0)}%`, inline: true },
-          { name: 'New Balance', value: formatVP(updatedUser.vp), inline: true }
-        );
+        .addFields(...oddsFields, { name: 'New Balance', value: formatVP(updatedUser.vp), inline: true });
     } else {
       embed
         .setColor(0xff9900)
         .setTitle('😔 Daily Claim Failed')
         .setDescription('Better luck next time!')
-        .addFields(
-          { name: 'Odds', value: `${(chance * 100).toFixed(0)}%`, inline: true },
-          { name: 'Current Balance', value: formatVP(updatedUser.vp), inline: true }
-        );
+        .addFields(...oddsFields, { name: 'Current Balance', value: formatVP(updatedUser.vp), inline: true });
     }
 
     await interaction.editReply({ embeds: [embed] });

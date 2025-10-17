@@ -157,6 +157,92 @@ export function resolveReaction(game) {
 }
 
 /**
+ * Coin Flip Game
+ */
+export function createCoinFlipGame() {
+  return {
+    type: 'coinflip',
+    flip: Math.random() < 0.5 ? 'heads' : 'tails',
+  };
+}
+
+export function resolveCoinFlip(game) {
+  return game.flip === 'heads' ? 'challenger' : 'opponent';
+}
+
+/**
+ * Odd vs Even Game
+ */
+export function createOddEvenGame() {
+  const number = randomInt(1, 10);
+  return {
+    type: 'oddeven',
+    number,
+  };
+}
+
+export function resolveOddEven(game) {
+  return game.number % 2 === 1 ? 'challenger' : 'opponent';
+}
+
+/**
+ * Archery Shootout Game
+ */
+export function createArcheryGame() {
+  const challengerShots = Array.from({ length: 3 }, () => randomInt(1, 10));
+  const opponentShots = Array.from({ length: 3 }, () => randomInt(1, 10));
+
+  const challengerTotal = challengerShots.reduce((acc, value) => acc + value, 0);
+  const opponentTotal = opponentShots.reduce((acc, value) => acc + value, 0);
+
+  return {
+    type: 'archery',
+    challengerShots,
+    opponentShots,
+    challengerTotal,
+    opponentTotal,
+  };
+}
+
+export function resolveArchery(game) {
+  if (game.challengerTotal > game.opponentTotal) {
+    return 'challenger';
+  }
+
+  if (game.opponentTotal > game.challengerTotal) {
+    return 'opponent';
+  }
+
+  return 'tie';
+}
+
+/**
+ * Sprint Showdown Game
+ */
+export function createSprintGame() {
+  const challengerTime = randomInt(800, 1600);
+  const opponentTime = randomInt(800, 1600);
+
+  return {
+    type: 'sprint',
+    challengerTime,
+    opponentTime,
+  };
+}
+
+export function resolveSprint(game) {
+  if (game.challengerTime < game.opponentTime) {
+    return 'challenger';
+  }
+
+  if (game.opponentTime < game.challengerTime) {
+    return 'opponent';
+  }
+
+  return 'tie';
+}
+
+/**
  * Format card for display
  */
 export function formatCard(card) {
@@ -173,6 +259,10 @@ export function getGameDisplayName(gameType) {
     dice: 'Dice Duel',
     hilow: 'Hi-Lo',
     reaction: 'Reaction Duel',
+    coinflip: 'Coin Flip',
+    oddeven: 'Odd vs Even',
+    archery: 'Archery Shootout',
+    sprint: 'Sprint Showdown',
   };
   return names[gameType] || gameType;
 }

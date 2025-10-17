@@ -16,11 +16,19 @@ import {
   createDiceGame,
   createHiLoGame,
   createReactionGame,
+  createCoinFlipGame,
+  createOddEvenGame,
+  createArcheryGame,
+  createSprintGame,
   resolveRPS,
   resolveHighCard,
   resolveDice,
   resolveHiLo,
   resolveReaction,
+  resolveCoinFlip,
+  resolveOddEven,
+  resolveArchery,
+  resolveSprint,
   formatCard,
   getGameDisplayName,
 } from '../lib/games.js';
@@ -35,9 +43,26 @@ const GAME_CHOICES = [
   { value: 'dice', label: 'Dice Duel', emoji: '🎲' },
   { value: 'hilow', label: 'Hi-Lo', emoji: '📈' },
   { value: 'reaction', label: 'Reaction Duel', emoji: '⚡' },
+  { value: 'coinflip', label: 'Coin Flip', emoji: '🪙' },
+  { value: 'oddeven', label: 'Odd vs Even', emoji: '➗' },
+  { value: 'archery', label: 'Archery Shootout', emoji: '🏹' },
+  { value: 'sprint', label: 'Sprint Showdown', emoji: '🏃' },
 ];
 
-const PRESET_WAGER_AMOUNTS = [10, 25, 50, 100, 250, 500, 1000];
+const WAGER_SELECTS = [
+  {
+    id: 'battle_setup_wager_low',
+    start: 1,
+    end: 25,
+    placeholder: 'Select wager (1-25)',
+  },
+  {
+    id: 'battle_setup_wager_high',
+    start: 26,
+    end: 50,
+    placeholder: 'Select wager (26-50)',
+  },
+];
 
 function saveBattleSetupState(userId, state) {
   battleSetupState.set(userId, {
@@ -96,20 +121,6 @@ function buildBattleSetupComponents(state, { disabled = false } = {}) {
     default: state.game === choice.value,
   }));
 
-  const amountOptions = PRESET_WAGER_AMOUNTS.map((amount) => ({
-    label: formatVP(amount),
-    value: amount.toString(),
-    default: state.amount === amount,
-  }));
-
-  if (state.amount && !PRESET_WAGER_AMOUNTS.includes(state.amount)) {
-    amountOptions.unshift({
-      label: `Custom: ${formatVP(state.amount)}`,
-      value: `custom:${state.amount}`,
-      default: true,
-    });
-  }
-
   const gameRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('battle_setup_game')
@@ -120,15 +131,26 @@ function buildBattleSetupComponents(state, { disabled = false } = {}) {
       .setDisabled(disabled)
   );
 
-  const wagerRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('battle_setup_wager')
-      .setPlaceholder('Select a wager')
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(amountOptions)
-      .setDisabled(disabled)
-  );
+  const wagerRows = WAGER_SELECTS.map((range) => {
+    const options = Array.from({ length: range.end - range.start + 1 }, (_, index) => {
+      const amount = range.start + index;
+      return {
+        label: formatVP(amount),
+        value: amount.toString(),
+        default: state.amount === amount,
+      };
+    });
+
+    return new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(range.id)
+        .setPlaceholder(range.placeholder)
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(options)
+        .setDisabled(disabled)
+    );
+  });
 
   const opponentMenu = new UserSelectMenuBuilder()
     .setCustomId('battle_setup_opponent')
@@ -156,7 +178,7 @@ function buildBattleSetupComponents(state, { disabled = false } = {}) {
       .setDisabled(disabled)
   );
 
-  return [gameRow, wagerRow, opponentRow, confirmRow];
+  return [gameRow, ...wagerRows, opponentRow, confirmRow];
 }
 
 async function notifyInactiveBattleSetup(interaction) {
@@ -214,7 +236,7 @@ async function handleBattleSetupWager(interaction) {
     ? parseInt(rawValue.split(':')[1], 10)
     : parseInt(rawValue, 10);
 
-  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+  if (!Number.isFinite(parsedValue) || parsedValue < 1 || parsedValue > 50) {
     await interaction.reply({
       content: '❌ Please choose a valid wager amount.',
       ephemeral: true,
@@ -507,7 +529,11 @@ export const data = new SlashCommandBuilder()
         { name: 'High Card', value: 'highcard' },
         { name: 'Dice Duel', value: 'dice' },
         { name: 'Hi-Lo', value: 'hilow' },
-        { name: 'Reaction Duel', value: 'reaction' }
+        { name: 'Reaction Duel', value: 'reaction' },
+        { name: 'Coin Flip', value: 'coinflip' },
+        { name: 'Odd vs Even', value: 'oddeven' },
+        { name: 'Archery Shootout', value: 'archery' },
+        { name: 'Sprint Showdown', value: 'sprint' }
       )
   );
 
@@ -549,6 +575,7 @@ export async function execute(interaction, _client) {
     embeds: [embed],
     components,
     ephemeral: true,
+    fetchReply: true,
   });
 
   initialState.messageId = reply.id;
@@ -564,7 +591,7 @@ export async function handleBattleInteraction(interaction) {
       return true;
     }
 
-    if (customId === 'battle_setup_wager') {
+    if (customId.startsWith('battle_setup_wager')) {
       await handleBattleSetupWager(interaction);
       return true;
     }
@@ -706,6 +733,18 @@ async function startGame(interaction, battle) {
       break;
     case 'reaction':
       await startReaction(interaction, battle);
+      break;
+    case 'coinflip':
+      await startCoinFlip(interaction, battle);
+      break;
+    case 'oddeven':
+      await startOddEven(interaction, battle);
+      break;
+    case 'archery':
+      await startArchery(interaction, battle);
+      break;
+    case 'sprint':
+      await startSprint(interaction, battle);
       break;
   }
 }
@@ -1043,6 +1082,52 @@ async function startReaction(interaction, battle) {
   }, gameState.delay);
 }
 
+async function startCoinFlip(interaction, battle) {
+  const gameState = createCoinFlipGame();
+  const result = resolveCoinFlip(gameState);
+
+  const winnerId = result === 'challenger' ? battle.challengerId : battle.opponentId;
+
+  await finalizeBattle(interaction, battle, winnerId, gameState);
+}
+
+async function startOddEven(interaction, battle) {
+  const gameState = createOddEvenGame();
+  const result = resolveOddEven(gameState);
+
+  const winnerId = result === 'challenger' ? battle.challengerId : battle.opponentId;
+
+  await finalizeBattle(interaction, battle, winnerId, gameState);
+}
+
+async function startArchery(interaction, battle) {
+  const gameState = createArcheryGame();
+  const result = resolveArchery(gameState);
+
+  if (result === 'tie') {
+    await startArchery(interaction, battle);
+    return;
+  }
+
+  const winnerId = result === 'challenger' ? battle.challengerId : battle.opponentId;
+
+  await finalizeBattle(interaction, battle, winnerId, gameState);
+}
+
+async function startSprint(interaction, battle) {
+  const gameState = createSprintGame();
+  const result = resolveSprint(gameState);
+
+  if (result === 'tie') {
+    await startSprint(interaction, battle);
+    return;
+  }
+
+  const winnerId = result === 'challenger' ? battle.challengerId : battle.opponentId;
+
+  await finalizeBattle(interaction, battle, winnerId, gameState);
+}
+
 async function handleReactionButton(interaction) {
   const parts = interaction.customId.split('_');
   const battleId = parseInt(parts[2]);
@@ -1150,6 +1235,18 @@ async function finalizeBattle(interaction, battle, winnerId, gameState) {
       break;
     case 'reaction':
       resultDescription = `**Challenger:** ${gameState.clickedAt.challenger || 'No click'}ms\n**Opponent:** ${gameState.clickedAt.opponent || 'No click'}ms`;
+      break;
+    case 'coinflip':
+      resultDescription = `**Coin Result:** ${gameState.flip.toUpperCase()}\n**Challenger:** Heads\n**Opponent:** Tails`;
+      break;
+    case 'oddeven':
+      resultDescription = `**Number:** ${gameState.number}\n**Challenger:** Odd\n**Opponent:** Even`;
+      break;
+    case 'archery':
+      resultDescription = `**Challenger:** ${gameState.challengerShots.join(', ')} (Total ${gameState.challengerTotal})\n**Opponent:** ${gameState.opponentShots.join(', ')} (Total ${gameState.opponentTotal})`;
+      break;
+    case 'sprint':
+      resultDescription = `**Challenger:** ${gameState.challengerTime}ms\n**Opponent:** ${gameState.opponentTime}ms`;
       break;
   }
 

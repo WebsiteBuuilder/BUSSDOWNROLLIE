@@ -17,6 +17,7 @@ model User {
   lastDailyAt           DateTime?
   streakDays            Int              @default(0)
   blacklisted           Boolean          @default(false)
+  dailyChanceModifier   Float            @default(0)
   createdAt             DateTime         @default(now())
   
   // Relations
