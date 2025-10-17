@@ -1,6 +1,7 @@
 import { ChannelType } from 'discord.js';
 
 import { logBlackjackEvent } from './blackjack-telemetry.js';
+import { getEnvVar } from './env.js';
 
 async function respondEphemeral(interaction, message) {
   const payload = typeof message === 'string' ? { content: message, ephemeral: true } : message;
@@ -59,7 +60,7 @@ function resolveChannelMetadata(channel) {
 }
 
 export async function ensureCasinoChannel(interaction) {
-  const casinoChannelId = process.env.CASINO_CHANNEL_ID;
+  const casinoChannelId = getEnvVar('CASINO_CHANNEL_ID');
   const baseLog = {
     userId: interaction.user?.id,
     guildId: interaction.guildId ?? null,
@@ -152,7 +153,9 @@ export async function ensureCasinoButtonContext(interaction) {
   const channel = interaction.channel ?? null;
   const metadata = resolveChannelMetadata(channel);
 
-  if (!metadata.resolvedChannelId || !process.env.CASINO_CHANNEL_ID) {
+  const casinoChannelId = getEnvVar('CASINO_CHANNEL_ID');
+
+  if (!metadata.resolvedChannelId || !casinoChannelId) {
     await respondEphemeral(
       interaction,
       '❌ Blackjack controls are unavailable right now. Please start a new game in the casino channel.'
@@ -160,10 +163,10 @@ export async function ensureCasinoButtonContext(interaction) {
     return { ok: false };
   }
 
-  if (metadata.resolvedChannelId !== process.env.CASINO_CHANNEL_ID) {
+  if (metadata.resolvedChannelId !== casinoChannelId) {
     await respondEphemeral(
       interaction,
-      `❌ These controls only work in <#${process.env.CASINO_CHANNEL_ID}>.`
+      `❌ These controls only work in <#${casinoChannelId}>.`
     );
     return { ok: false };
   }
