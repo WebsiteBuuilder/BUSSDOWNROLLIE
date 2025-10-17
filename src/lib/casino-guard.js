@@ -3,6 +3,24 @@ import { ChannelType } from 'discord.js';
 import { logBlackjackEvent } from './blackjack-telemetry.js';
 import { getEnvVar } from './env.js';
 
+function findCachedCasinoChannel(interaction) {
+  const guild = interaction.guild ?? interaction.client?.guilds?.cache?.get(interaction.guildId ?? '');
+
+  if (!guild) {
+    return null;
+  }
+
+  return (
+    guild.channels.cache.find((channel) => {
+      if (!channel || typeof channel.name !== 'string') {
+        return false;
+      }
+
+      return channel.name.toLowerCase().includes('casino');
+    }) ?? null
+  );
+}
+
 async function respondEphemeral(interaction, message) {
   const payload = typeof message === 'string' ? { content: message, ephemeral: true } : message;
 
@@ -60,27 +78,43 @@ function resolveChannelMetadata(channel) {
 }
 
 export async function ensureCasinoChannel(interaction) {
-  const casinoChannelId = getEnvVar('CASINO_CHANNEL_ID');
+  let casinoChannelId = getEnvVar('CASINO_CHANNEL_ID');
   const baseLog = {
     userId: interaction.user?.id,
     guildId: interaction.guildId ?? null,
     channelId: interaction.channelId ?? null,
-    casinoChannelId,
+    casinoChannelId: casinoChannelId ?? null,
   };
 
   logBlackjackEvent('guard.start', baseLog);
 
   if (!casinoChannelId) {
-    logBlackjackEvent('guard.error.missing_env', baseLog);
-    await respondEphemeral(
-      interaction,
-      '❌ CASINO_CHANNEL_ID is not configured. Please tell an admin to set it before playing.'
-    );
-    return { ok: false };
+    const fallbackChannel = findCachedCasinoChannel(interaction);
+
+    if (fallbackChannel) {
+      casinoChannelId = fallbackChannel.id;
+      logBlackjackEvent('guard.fallback.detected', {
+        ...baseLog,
+        casinoChannelId,
+        fallbackChannelId: fallbackChannel.id,
+      });
+    } else {
+      logBlackjackEvent('guard.error.missing_env', baseLog);
+      await respondEphemeral(
+        interaction,
+        '❌ CASINO_CHANNEL_ID is not configured, and I could not auto-detect a casino channel. Please create one or set the variable before playing.'
+      );
+      return { ok: false };
+    }
   }
 
+  const resolvedLog = {
+    ...baseLog,
+    casinoChannelId,
+  };
+
   if (!interaction.guildId) {
-    logBlackjackEvent('guard.error.dm_context', baseLog);
+    logBlackjackEvent('guard.error.dm_context', resolvedLog);
     await respondEphemeral(
       interaction,
       `❌ Blackjack is only available inside the server. Please use this command in <#${casinoChannelId}>.`
@@ -95,7 +129,7 @@ export async function ensureCasinoChannel(interaction) {
       channel = await interaction.client.channels.fetch(interaction.channelId);
     } catch (error) {
       logBlackjackEvent('guard.error.fetch_failed', {
-        ...baseLog,
+        ...resolvedLog,
         error: error.message,
       });
       await respondEphemeral(
@@ -110,7 +144,7 @@ export async function ensureCasinoChannel(interaction) {
 
   if (!metadata.resolvedChannelId) {
     logBlackjackEvent('guard.error.no_channel', {
-      ...baseLog,
+      ...resolvedLog,
       ...metadata,
     });
     await respondEphemeral(
@@ -122,7 +156,7 @@ export async function ensureCasinoChannel(interaction) {
 
   if (metadata.resolvedChannelId !== casinoChannelId) {
     logBlackjackEvent('guard.error.wrong_channel', {
-      ...baseLog,
+      ...resolvedLog,
       ...metadata,
     });
     await respondEphemeral(interaction, `❌ Please use this command in <#${casinoChannelId}>.`);
@@ -130,7 +164,7 @@ export async function ensureCasinoChannel(interaction) {
   }
 
   logBlackjackEvent('guard.success', {
-    ...baseLog,
+    ...resolvedLog,
     ...metadata,
   });
 
@@ -153,7 +187,9 @@ export async function ensureCasinoButtonContext(interaction) {
   const channel = interaction.channel ?? null;
   const metadata = resolveChannelMetadata(channel);
 
-  const casinoChannelId = getEnvVar('CASINO_CHANNEL_ID');
+  const envCasinoChannelId = getEnvVar('CASINO_CHANNEL_ID');
+  const fallbackChannel = envCasinoChannelId ? null : findCachedCasinoChannel(interaction);
+  const casinoChannelId = envCasinoChannelId ?? fallbackChannel?.id ?? null;
 
   if (!metadata.resolvedChannelId || !casinoChannelId) {
     await respondEphemeral(

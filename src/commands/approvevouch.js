@@ -101,24 +101,6 @@ export async function execute(interaction) {
       console.log('Could not react to message:', error.message);
     }
 
-    // DM user
-    try {
-      const discordUser = await interaction.client.users.fetch(vouch.user.discordId);
-      await discordUser.send({
-        embeds: [
-          {
-            color: 0x00ff00,
-            title: '✅ Vouch Approved!',
-            description: `Your vouch has been approved by **${interaction.user.username}**! +1 VP`,
-            fields: [{ name: 'New Balance', value: formatVP(updatedUser.vp), inline: true }],
-            timestamp: new Date().toISOString(),
-          },
-        ],
-      });
-    } catch (error) {
-      console.log('Could not DM user:', error.message);
-    }
-
     await interaction.editReply({
       content: `✅ Vouch approved! <@${vouch.user.discordId}> has been credited +1 VP. New balance: ${formatVP(updatedUser.vp)}`,
     });
