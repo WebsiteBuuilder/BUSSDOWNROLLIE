@@ -1,12 +1,5 @@
-import {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  UserSelectMenuBuilder,
-} from 'discord.js';
+import { randomUUID } from 'crypto';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import prisma, { getOrCreateUser, hasActiveBattle, getConfig } from '../db/index.js';
 import { formatVP, calculateBattleRake } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -33,9 +26,8 @@ import {
   getGameDisplayName,
 } from '../lib/games.js';
 
-const BATTLE_SETUP_TTL = 5 * 60 * 1000; // 5 minutes
-
-const battleSetupState = new Map();
+const BATTLE_MENU_TTL = 5 * 60 * 1000; // 5 minutes
+const battleMenuState = new Map();
 
 const GAME_CHOICES = [
   { value: 'rps', label: 'Rock Paper Scissors', emoji: '🪨' },
@@ -49,306 +41,139 @@ const GAME_CHOICES = [
   { value: 'sprint', label: 'Sprint Showdown', emoji: '🏃' },
 ];
 
-const WAGER_SELECTS = [
-  {
-    id: 'battle_setup_wager_low',
-    start: 1,
-    end: 25,
-    placeholder: 'Select wager (1-25)',
-  },
-  {
-    id: 'battle_setup_wager_high',
-    start: 26,
-    end: 50,
-    placeholder: 'Select wager (26-50)',
-  },
-];
-
-function saveBattleSetupState(userId, state) {
-  battleSetupState.set(userId, {
+function saveBattleMenuState(menuId, state) {
+  battleMenuState.set(menuId, {
     ...state,
-    expiresAt: Date.now() + BATTLE_SETUP_TTL,
+    expiresAt: Date.now() + BATTLE_MENU_TTL,
   });
 }
 
-function getBattleSetupState(userId) {
-  const state = battleSetupState.get(userId);
+function getBattleMenuState(menuId) {
+  const state = battleMenuState.get(menuId);
 
   if (!state) {
     return null;
   }
 
   if (state.expiresAt && state.expiresAt < Date.now()) {
-    battleSetupState.delete(userId);
+    battleMenuState.delete(menuId);
     return null;
   }
 
   return { ...state };
 }
 
-function clearBattleSetupState(userId) {
-  battleSetupState.delete(userId);
+function clearBattleMenuState(menuId) {
+  battleMenuState.delete(menuId);
 }
 
-function buildBattleSetupEmbed(challenger, state) {
-  const wagerText = state.amount ? formatVP(state.amount) : 'Not selected';
-  const opponentText = state.opponentId ? `<@${state.opponentId}>` : 'Not selected';
-
+function buildBattleMenuEmbed({ challenger, opponent, amount }) {
   return new EmbedBuilder()
     .setColor(0xffd700)
     .setTitle('🎮 Battle Hub')
     .setDescription(
-      'Choose a game, wager amount, and opponent to start a challenge. Use the controls below to configure your battle.'
+      `Select a game below to challenge **${opponent.username}** for ${formatVP(amount)}.`
     )
     .addFields(
-      {
-        name: 'Game',
-        value: getGameDisplayName(state.game) || 'Not selected',
-        inline: true,
-      },
-      { name: 'Wager', value: wagerText, inline: true },
-      { name: 'Opponent', value: opponentText, inline: true }
+      { name: 'Challenger', value: `<@${challenger.id}>`, inline: true },
+      { name: 'Opponent', value: `<@${opponent.id}>`, inline: true },
+      { name: 'Wager', value: formatVP(amount), inline: true }
     )
-    .setFooter({ text: 'Press "Send Challenge" once everything looks good.' })
+    .setFooter({ text: 'Game selections expire after 5 minutes.' })
     .setTimestamp();
 }
 
-function buildBattleSetupComponents(state, { disabled = false } = {}) {
-  const gameOptions = GAME_CHOICES.map((choice) => ({
-    label: choice.label,
-    value: choice.value,
-    emoji: choice.emoji,
-    default: state.game === choice.value,
-  }));
+function buildBattleMenuComponents(menuId, { disabled = false } = {}) {
+  const rows = [];
 
-  const gameRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('battle_setup_game')
-      .setPlaceholder('Select a game')
-      .setMinValues(1)
-      .setMaxValues(1)
-      .addOptions(gameOptions)
-      .setDisabled(disabled)
-  );
+  for (let index = 0; index < GAME_CHOICES.length; index += 5) {
+    const slice = GAME_CHOICES.slice(index, index + 5);
+    const row = new ActionRowBuilder();
 
-  const wagerRows = WAGER_SELECTS.map((range) => {
-    const options = Array.from({ length: range.end - range.start + 1 }, (_, index) => {
-      const amount = range.start + index;
-      return {
-        label: formatVP(amount),
-        value: amount.toString(),
-        default: state.amount === amount,
-      };
-    });
+    for (const choice of slice) {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`battle-menu:${menuId}:${choice.value}`)
+          .setLabel(`${choice.emoji} ${choice.label}`)
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(disabled)
+      );
+    }
 
-    return new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId(range.id)
-        .setPlaceholder(range.placeholder)
-        .setMinValues(1)
-        .setMaxValues(1)
-        .addOptions(options)
-        .setDisabled(disabled)
-    );
-  });
-
-  const opponentMenu = new UserSelectMenuBuilder()
-    .setCustomId('battle_setup_opponent')
-    .setPlaceholder('Choose an opponent')
-    .setMinValues(1)
-    .setMaxValues(1)
-    .setDisabled(disabled);
-
-  if (state.opponentId) {
-    opponentMenu.setDefaultUsers(state.opponentId);
+    rows.push(row);
   }
 
-  const opponentRow = new ActionRowBuilder().addComponents(opponentMenu);
-
-  const confirmRow = new ActionRowBuilder().addComponents(
+  const cancelRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('battle_setup_confirm')
-      .setLabel('Send Challenge')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(disabled || !state.amount || !state.opponentId),
-    new ButtonBuilder()
-      .setCustomId('battle_setup_cancel')
+      .setCustomId(`battle-menu:${menuId}:cancel`)
       .setLabel('Cancel')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled)
   );
 
-  return [gameRow, ...wagerRows, opponentRow, confirmRow];
+  rows.push(cancelRow);
+
+  return rows;
 }
 
-async function notifyInactiveBattleSetup(interaction) {
+async function notifyInactiveBattleMenu(interaction) {
+  const payload = {
+    content: '❌ This battle menu is no longer active. Use `/battle` to start a new challenge.',
+    embeds: [],
+    components: [],
+  };
+
   if (!interaction.deferred && !interaction.replied) {
     try {
-      await interaction.update({
-        content: '❌ This battle setup is no longer active. Use `/battle` to start a new challenge.',
-        embeds: [],
-        components: [],
-      });
+      if (interaction.isMessageComponent()) {
+        await interaction.update(payload);
+      } else {
+        await interaction.reply({ content: payload.content, ephemeral: true });
+      }
       return;
     } catch (error) {
       try {
-        await interaction.reply({
-          content: '❌ This battle setup is no longer active. Use `/battle` to start a new challenge.',
-          ephemeral: true,
-        });
+        await interaction.reply({ content: payload.content, ephemeral: true });
         return;
       } catch (replyError) {
-        console.error('Failed to notify about inactive battle setup:', replyError);
+        console.error('Failed to notify about inactive battle menu:', replyError);
       }
     }
   }
+
+  try {
+    await interaction.followUp({ content: payload.content, ephemeral: true });
+  } catch (followError) {
+    console.error('Failed to send follow-up for inactive battle menu:', followError);
+  }
 }
 
-async function handleBattleSetupGame(interaction) {
-  const state = getBattleSetupState(interaction.user.id);
+async function handleBattleMenuButton(interaction, menuId, action) {
+  const state = getBattleMenuState(menuId);
 
-  if (!state || state.messageId !== interaction.message.id) {
-    await notifyInactiveBattleSetup(interaction);
-    return;
+  if (!state || state.messageId !== interaction.message.id || state.channelId !== interaction.channelId) {
+    await notifyInactiveBattleMenu(interaction);
+    return true;
   }
 
-  const [selectedGame] = interaction.values;
-  state.game = selectedGame;
-
-  saveBattleSetupState(interaction.user.id, state);
-
-  const embed = buildBattleSetupEmbed(interaction.user, state);
-  const components = buildBattleSetupComponents(state);
-
-  await interaction.update({ embeds: [embed], components });
-}
-
-async function handleBattleSetupWager(interaction) {
-  const state = getBattleSetupState(interaction.user.id);
-
-  if (!state || state.messageId !== interaction.message.id) {
-    await notifyInactiveBattleSetup(interaction);
-    return;
-  }
-
-  const [rawValue] = interaction.values;
-  const parsedValue = rawValue.startsWith('custom:')
-    ? parseInt(rawValue.split(':')[1], 10)
-    : parseInt(rawValue, 10);
-
-  if (!Number.isFinite(parsedValue) || parsedValue < 1 || parsedValue > 50) {
+  if (interaction.user.id !== state.challengerId) {
     await interaction.reply({
-      content: '❌ Please choose a valid wager amount.',
+      content: '❌ Only the original challenger can use this menu.',
       ephemeral: true,
     });
-    return;
+    return true;
   }
 
-  state.amount = parsedValue;
+  if (action === 'cancel') {
+    clearBattleMenuState(menuId);
 
-  saveBattleSetupState(interaction.user.id, state);
-
-  const embed = buildBattleSetupEmbed(interaction.user, state);
-  const components = buildBattleSetupComponents(state);
-
-  await interaction.update({ embeds: [embed], components });
-}
-
-async function handleBattleSetupOpponent(interaction) {
-  const state = getBattleSetupState(interaction.user.id);
-
-  if (!state || state.messageId !== interaction.message.id) {
-    await notifyInactiveBattleSetup(interaction);
-    return;
-  }
-
-  const [selectedUserId] = interaction.values;
-
-  if (selectedUserId === interaction.user.id) {
-    await interaction.reply({
-      content: '❌ You cannot challenge yourself.',
-      ephemeral: true,
+    await interaction.update({
+      content: '❌ Battle challenge canceled.',
+      embeds: [],
+      components: [],
     });
-    return;
-  }
 
-  const opponent = await interaction.client.users.fetch(selectedUserId).catch(() => null);
-
-  if (!opponent) {
-    await interaction.reply({
-      content: '❌ Unable to find that user. Please try again.',
-      ephemeral: true,
-    });
-    return;
-  }
-
-  if (opponent.bot) {
-    await interaction.reply({
-      content: '❌ You cannot challenge bots to battles.',
-      ephemeral: true,
-    });
-    return;
-  }
-
-  state.opponentId = opponent.id;
-
-  saveBattleSetupState(interaction.user.id, state);
-
-  const embed = buildBattleSetupEmbed(interaction.user, state);
-  const components = buildBattleSetupComponents(state);
-
-  await interaction.update({ embeds: [embed], components });
-}
-
-async function handleBattleSetupCancel(interaction) {
-  const state = getBattleSetupState(interaction.user.id);
-
-  if (!state || state.messageId !== interaction.message.id) {
-    await notifyInactiveBattleSetup(interaction);
-    return;
-  }
-
-  clearBattleSetupState(interaction.user.id);
-
-  await interaction.update({
-    content: '❌ Battle setup canceled.',
-    embeds: [],
-    components: [],
-  });
-}
-
-async function handleBattleSetupConfirm(interaction) {
-  const state = getBattleSetupState(interaction.user.id);
-
-  if (!state || state.messageId !== interaction.message.id) {
-    await notifyInactiveBattleSetup(interaction);
-    return;
-  }
-
-  if (!state.amount || !state.opponentId) {
-    await interaction.reply({
-      content: '❌ Please choose both a wager amount and an opponent before sending the challenge.',
-      ephemeral: true,
-    });
-    return;
-  }
-
-  if (state.channelId && state.channelId !== interaction.channelId) {
-    await interaction.reply({
-      content: '❌ This battle setup was created in a different channel. Please use `/battle` again there.',
-      ephemeral: true,
-    });
-    return;
-  }
-
-  const opponent = await interaction.client.users.fetch(state.opponentId).catch(() => null);
-
-  if (!opponent) {
-    await interaction.reply({
-      content: '❌ I could not find that opponent. Please select them again.',
-      ephemeral: true,
-    });
-    return;
+    return true;
   }
 
   if (!interaction.channel) {
@@ -356,45 +181,54 @@ async function handleBattleSetupConfirm(interaction) {
       content: '❌ Unable to locate the channel for this challenge. Try again in a guild channel.',
       ephemeral: true,
     });
-    return;
+    return true;
   }
 
-  await interaction.deferReply({ ephemeral: true });
-
-  let success = false;
+  await interaction.deferUpdate();
 
   try {
+    const challenger = await interaction.client.users.fetch(state.challengerId);
+    const opponent = await interaction.client.users.fetch(state.opponentId);
+
     await createBattleChallenge({
       channel: interaction.channel,
-      challenger: interaction.user,
+      challenger,
       opponent,
       amount: state.amount,
-      game: state.game,
+      game: action,
     });
 
-    const confirmationEmbed = buildBattleSetupEmbed(interaction.user, state).setDescription(
-      '✅ Challenge sent! Your opponent has been pinged with an Accept/Decline panel.'
-    );
+    clearBattleMenuState(menuId);
 
-    await interaction.message.edit({
-      embeds: [confirmationEmbed],
-      components: buildBattleSetupComponents(state, { disabled: true }),
-    });
+    const summaryEmbed = new EmbedBuilder()
+      .setColor(0x00ff00)
+      .setTitle('✅ Challenge Sent')
+      .setDescription(
+        `Sent a ${getGameDisplayName(action)} challenge to **${opponent.username}** for ${formatVP(state.amount)}.`
+      )
+      .addFields(
+        { name: 'Opponent', value: `<@${opponent.id}>`, inline: true },
+        { name: 'Wager', value: formatVP(state.amount), inline: true },
+        { name: 'Game', value: getGameDisplayName(action), inline: true }
+      )
+      .setTimestamp();
 
     await interaction.editReply({
-      content: `✅ Challenge sent to <@${opponent.id}> for ${formatVP(state.amount)} playing ${getGameDisplayName(state.game)}!`,
+      embeds: [summaryEmbed],
+      components: [],
     });
-
-    success = true;
   } catch (error) {
     console.error('Error creating battle challenge:', error);
     const message = error instanceof Error ? error.message : 'Failed to create battle. Please try again.';
-    await interaction.editReply({ content: `❌ ${message}` });
+
+    try {
+      await interaction.followUp({ content: `❌ ${message}`, ephemeral: true });
+    } catch (followError) {
+      console.error('Failed to send follow-up error message for battle challenge:', followError);
+    }
   }
 
-  if (success) {
-    clearBattleSetupState(interaction.user.id);
-  }
+  return true;
 }
 
 async function createBattleChallenge({ channel, challenger, opponent, amount, game }) {
@@ -510,66 +344,55 @@ export const data = new SlashCommandBuilder()
   .setName('battle')
   .setDescription('Challenge another user to a 1v1 game')
   .addUserOption((option) =>
-    option.setName('user').setDescription('User to challenge').setRequired(false)
+    option.setName('user').setDescription('User to challenge').setRequired(true)
   )
   .addIntegerOption((option) =>
     option
       .setName('amount')
-      .setDescription('Amount of VP to wager')
+      .setDescription('Amount of VP to wager (defaults to 1)')
       .setRequired(false)
       .setMinValue(1)
-  )
-  .addStringOption((option) =>
-    option
-      .setName('game')
-      .setDescription('Game type to play')
-      .setRequired(false)
-      .addChoices(
-        { name: 'Rock Paper Scissors', value: 'rps' },
-        { name: 'High Card', value: 'highcard' },
-        { name: 'Dice Duel', value: 'dice' },
-        { name: 'Hi-Lo', value: 'hilow' },
-        { name: 'Reaction Duel', value: 'reaction' },
-        { name: 'Coin Flip', value: 'coinflip' },
-        { name: 'Odd vs Even', value: 'oddeven' },
-        { name: 'Archery Shootout', value: 'archery' },
-        { name: 'Sprint Showdown', value: 'sprint' }
-      )
+      .setMaxValue(50)
   );
 
 export async function execute(interaction, _client) {
   const challenger = interaction.user;
-  const opponentOption = interaction.options.getUser('user');
+  const opponent = interaction.options.getUser('user');
   const amountOption = interaction.options.getInteger('amount');
-  const gameType = interaction.options.getString('game') || 'rps';
+  const amount = amountOption ?? 1;
 
-  if (opponentOption) {
-    if (opponentOption.bot) {
-      return interaction.reply({
-        content: '❌ You cannot challenge bots to battles.',
-        ephemeral: true,
-      });
-    }
-
-    if (opponentOption.id === challenger.id) {
-      return interaction.reply({
-        content: '❌ You cannot challenge yourself.',
-        ephemeral: true,
-      });
-    }
+  if (amount < 1 || amount > 50) {
+    return interaction.reply({
+      content: '❌ Wager amount must be between 1 and 50 VP.',
+      ephemeral: true,
+    });
   }
 
-  const initialState = {
-    challengerId: challenger.id,
-    opponentId: opponentOption?.id ?? null,
-    amount: amountOption ?? null,
-    game: gameType,
-    channelId: interaction.channelId,
-    messageId: null,
-  };
+  if (!opponent) {
+    return interaction.reply({
+      content: '❌ Please choose an opponent to challenge.',
+      ephemeral: true,
+    });
+  }
 
-  const embed = buildBattleSetupEmbed(challenger, initialState);
-  const components = buildBattleSetupComponents(initialState);
+  if (opponent.bot) {
+    return interaction.reply({
+      content: '❌ You cannot challenge bots to battles.',
+      ephemeral: true,
+    });
+  }
+
+  if (opponent.id === challenger.id) {
+    return interaction.reply({
+      content: '❌ You cannot challenge yourself.',
+      ephemeral: true,
+    });
+  }
+
+  const menuId = randomUUID();
+
+  const embed = buildBattleMenuEmbed({ challenger, opponent, amount });
+  const components = buildBattleMenuComponents(menuId);
 
   const reply = await interaction.reply({
     embeds: [embed],
@@ -578,48 +401,30 @@ export async function execute(interaction, _client) {
     fetchReply: true,
   });
 
-  initialState.messageId = reply.id;
-  saveBattleSetupState(challenger.id, initialState);
+  saveBattleMenuState(menuId, {
+    challengerId: challenger.id,
+    opponentId: opponent.id,
+    amount,
+    channelId: interaction.channelId,
+    messageId: reply.id,
+  });
 }
 
 export async function handleBattleInteraction(interaction) {
   const customId = interaction.customId;
 
-  if (interaction.isStringSelectMenu()) {
-    if (customId === 'battle_setup_game') {
-      await handleBattleSetupGame(interaction);
-      return true;
+  if (interaction.isButton() && customId.startsWith('battle-menu:')) {
+    const [, menuId, action] = customId.split(':');
+
+    if (!menuId || !action) {
+      return false;
     }
 
-    if (customId.startsWith('battle_setup_wager')) {
-      await handleBattleSetupWager(interaction);
-      return true;
-    }
-
-    return false;
-  }
-
-  if (interaction.isUserSelectMenu()) {
-    if (customId === 'battle_setup_opponent') {
-      await handleBattleSetupOpponent(interaction);
-      return true;
-    }
-
-    return false;
+    return handleBattleMenuButton(interaction, menuId, action);
   }
 
   if (!interaction.isButton()) {
     return false;
-  }
-
-  if (customId === 'battle_setup_confirm') {
-    await handleBattleSetupConfirm(interaction);
-    return true;
-  }
-
-  if (customId === 'battle_setup_cancel') {
-    await handleBattleSetupCancel(interaction);
-    return true;
   }
 
   // Battle accept/decline
