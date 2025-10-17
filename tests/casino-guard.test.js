@@ -92,6 +92,23 @@ describe('ensureCasinoChannel', () => {
     );
   });
 
+  it('allows commands when CASINO_CHANNEL_ID is provided with different casing', async () => {
+    const originalValue = process.env.CASINO_CHANNEL_ID;
+    delete process.env.CASINO_CHANNEL_ID;
+    process.env.casino_channel_id = originalValue;
+
+    try {
+      const interaction = createMockInteraction({ channelId: originalValue });
+
+      const result = await ensureCasinoChannel(interaction);
+
+      expect(result.ok).toBe(true);
+    } finally {
+      delete process.env.casino_channel_id;
+      process.env.CASINO_CHANNEL_ID = originalValue;
+    }
+  });
+
   it('allows threads under the casino channel', async () => {
     const interaction = createMockInteraction({
       channelId: 'thread-channel',
