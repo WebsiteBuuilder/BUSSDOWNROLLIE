@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import { readdirSync } from 'fs';
 import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
-import { handleBattle, handleBattleGameSelect, BATTLE_MENU_NAMESPACE } from './commands/battle.js';
+import { handleBattleComponent, handleBattleSelect, isBattleInteraction } from './commands/battle.js';
 import { handleBlackjackInteraction } from './commands/blackjack.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
@@ -146,10 +146,6 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'battle') {
-        return handleBattle(interaction);
-      }
-
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
@@ -184,6 +180,13 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isButton()) {
+      if (isBattleInteraction(interaction.customId)) {
+        const handled = await handleBattleComponent(interaction);
+        if (handled) {
+          return;
+        }
+      }
+
       const customId = interaction.customId ?? '';
 
       if (customId.startsWith('approvevouch:')) {
@@ -198,8 +201,8 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isStringSelectMenu()) {
-      if (interaction.customId?.startsWith(`${BATTLE_MENU_NAMESPACE}:`)) {
-        const handled = await handleBattleGameSelect(interaction);
+      if (isBattleInteraction(interaction.customId)) {
+        const handled = await handleBattleSelect(interaction);
         if (handled) {
           return;
         }

@@ -1,60 +1,37 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { handleBattleGameSelect, BATTLE_MENU_NAMESPACE } from '../src/commands/battle.js';
+import { describe, expect, it } from 'vitest';
+import { data as battleCommand } from '../src/commands/battle.js';
+import { battleGames, getGameByKey } from '../src/battle/registry.js';
 
-afterEach(() => {
-  vi.restoreAllMocks();
+describe('battle command', () => {
+  it('includes challenge and open subcommands', () => {
+    const json = battleCommand.toJSON();
+    const subcommands = json.options.filter((option) => option.type === 1); // type 1 = SUB_COMMAND
+    const names = subcommands.map((option) => option.name);
+
+    expect(names).toContain('challenge');
+    expect(names).toContain('open');
+
+    const challenge = subcommands.find((option) => option.name === 'challenge');
+    expect(challenge.options.find((option) => option.name === 'opponent').required).toBe(true);
+    expect(challenge.options.find((option) => option.name === 'amount').required).toBe(true);
+
+    const open = subcommands.find((option) => option.name === 'open');
+    expect(open.options.find((option) => option.name === 'amount').required).toBe(true);
+  });
 });
 
-describe('battle game select menu', () => {
-  it('rejects interactions from non-participants', async () => {
-    const reply = vi.fn(() => Promise.resolve());
-    const interaction = {
-      customId: `${BATTLE_MENU_NAMESPACE}:user-1:user-2:50`,
-      user: { id: 'user-3' },
-      values: ['coinflip'],
-      reply,
-    };
-
-    const handled = await handleBattleGameSelect(interaction);
-
-    expect(handled).toBe(true);
-    expect(reply).toHaveBeenCalledTimes(1);
-    expect(reply.mock.calls[0][0]).toMatchObject({ ephemeral: true });
+describe('battle games registry', () => {
+  it('contains all 13 registered games', () => {
+    const keys = battleGames.map((game) => game.key);
+    expect(new Set(keys).size).toBe(13);
+    expect(keys).toContain('hi_low_draw');
+    expect(keys).toContain('rock_paper_scissors');
+    expect(keys).toContain('reaction_test');
   });
 
-  it('responds with instructions for a valid selection', async () => {
-    const reply = vi.fn(() => Promise.resolve());
-    const interaction = {
-      customId: `${BATTLE_MENU_NAMESPACE}:user-1:user-2:75`,
-      user: { id: 'user-1' },
-      values: ['coinflip'],
-      reply,
-    };
-
-    const handled = await handleBattleGameSelect(interaction);
-
-    expect(handled).toBe(true);
-    expect(reply).toHaveBeenCalledTimes(1);
-
-    const { embeds } = reply.mock.calls[0][0];
-    expect(Array.isArray(embeds)).toBe(true);
-    expect(embeds[0]?.data?.title).toContain('Coin Flip');
-    expect(embeds[0]?.data?.description).toContain('75 VP');
-  });
-
-  it('handles unknown menu options gracefully', async () => {
-    const reply = vi.fn(() => Promise.resolve());
-    const interaction = {
-      customId: `${BATTLE_MENU_NAMESPACE}:user-1:user-2:20`,
-      user: { id: 'user-1' },
-      values: ['unknown'],
-      reply,
-    };
-
-    const handled = await handleBattleGameSelect(interaction);
-
-    expect(handled).toBe(true);
-    expect(reply).toHaveBeenCalledTimes(1);
-    expect(reply.mock.calls[0][0].content).toContain('no longer available');
+  it('finds games by key', () => {
+    const game = getGameByKey('hi_low_draw');
+    expect(game).toBeDefined();
+    expect(game?.name).toContain('Hi');
   });
 });
