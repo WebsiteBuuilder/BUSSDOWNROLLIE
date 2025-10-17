@@ -67,6 +67,22 @@ function clearBattleMenuState(menuId) {
   battleMenuState.delete(menuId);
 }
 
+async function getUserDisplayName(client, discordId) {
+  const cachedUser = client.users.cache.get(discordId);
+
+  if (cachedUser) {
+    return cachedUser.username;
+  }
+
+  try {
+    const fetchedUser = await client.users.fetch(discordId);
+    return fetchedUser.username;
+  } catch (error) {
+    console.warn(`Failed to resolve Discord user ${discordId} for battle menu:`, error);
+    return `<@${discordId}>`;
+  }
+}
+
 function buildBattleMenuEmbed({ challenger, opponent, amount }) {
   return new EmbedBuilder()
     .setColor(0xffd700)
@@ -751,11 +767,16 @@ async function startHiLo(interaction, battle) {
     },
   });
 
+  const [challengerName, opponentName] = await Promise.all([
+    getUserDisplayName(interaction.client, battle.challenger.discordId),
+    getUserDisplayName(interaction.client, battle.opponent.discordId),
+  ]);
+
   const embed = new EmbedBuilder()
     .setColor(0x00ff00)
     .setTitle('🎲 Hi-Lo Number Duel')
     .setDescription(
-      `A number between 1-100 has been chosen!\n\n**${interaction.client.users.cache.get(battle.challenger.discordId).username}** guesses **HIGH** (>50)\n**${interaction.client.users.cache.get(battle.opponent.discordId).username}** guesses **LOW** (<50)`
+      `A number between 1-100 has been chosen!\n\n**${challengerName}** guesses **HIGH** (>50)\n**${opponentName}** guesses **LOW** (<50)`
     )
     .addFields({ name: 'Wager', value: formatVP(battle.amount), inline: true })
     .setTimestamp();
