@@ -36,6 +36,7 @@ class BattleState {
     this.timeouts = new Map();
     this.resolved = false;
     this.game = null;
+    this.snapshot = null;
   }
 
   makeId(suffix) {
@@ -163,6 +164,7 @@ async function finalizeBattle(battle, winnerId, loserId, { summary } = {}) {
   battle.resolved = true;
   battle.clearActions();
   battle.clearAllTimeouts();
+  battle.snapshot = null;
 
   await settleBattle(battle, winnerId, loserId);
 
@@ -568,6 +570,13 @@ export async function handleBattleSelect(interaction) {
     },
     end: async (winnerId, loserId, options = {}) => finalizeBattle(battle, winnerId, loserId, options),
     ensureParticipant: (i) => ensureParticipant(i, battle),
+    saveSnapshot: (snapshot) => {
+      battle.snapshot = {
+        gameKey: battle.game?.key,
+        updatedAt: Date.now(),
+        state: snapshot,
+      };
+    },
     battle,
   };
 
