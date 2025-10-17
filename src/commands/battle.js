@@ -4,6 +4,8 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
 } from 'discord.js';
 import prisma, { getOrCreateUser, hasActiveBattle, getConfig } from '../db/index.js';
 import { formatVP, calculateBattleRake } from '../lib/utils.js';
@@ -23,17 +25,476 @@ import {
   getGameDisplayName,
 } from '../lib/games.js';
 
+const BATTLE_SETUP_TTL = 5 * 60 * 1000; // 5 minutes
+
+const battleSetupState = new Map();
+
+const GAME_CHOICES = [
+  { value: 'rps', label: 'Rock Paper Scissors', emoji: '🪨' },
+  { value: 'highcard', label: 'High Card', emoji: '🃏' },
+  { value: 'dice', label: 'Dice Duel', emoji: '🎲' },
+  { value: 'hilow', label: 'Hi-Lo', emoji: '📈' },
+  { value: 'reaction', label: 'Reaction Duel', emoji: '⚡' },
+];
+
+const PRESET_WAGER_AMOUNTS = [10, 25, 50, 100, 250, 500, 1000];
+
+function saveBattleSetupState(userId, state) {
+  battleSetupState.set(userId, {
+    ...state,
+    expiresAt: Date.now() + BATTLE_SETUP_TTL,
+  });
+}
+
+function getBattleSetupState(userId) {
+  const state = battleSetupState.get(userId);
+
+  if (!state) {
+    return null;
+  }
+
+  if (state.expiresAt && state.expiresAt < Date.now()) {
+    battleSetupState.delete(userId);
+    return null;
+  }
+
+  return { ...state };
+}
+
+function clearBattleSetupState(userId) {
+  battleSetupState.delete(userId);
+}
+
+function buildBattleSetupEmbed(challenger, state) {
+  const wagerText = state.amount ? formatVP(state.amount) : 'Not selected';
+  const opponentText = state.opponentId ? `<@${state.opponentId}>` : 'Not selected';
+
+  return new EmbedBuilder()
+    .setColor(0xffd700)
+    .setTitle('🎮 Battle Hub')
+    .setDescription(
+      'Choose a game, wager amount, and opponent to start a challenge. Use the controls below to configure your battle.'
+    )
+    .addFields(
+      {
+        name: 'Game',
+        value: getGameDisplayName(state.game) || 'Not selected',
+        inline: true,
+      },
+      { name: 'Wager', value: wagerText, inline: true },
+      { name: 'Opponent', value: opponentText, inline: true }
+    )
+    .setFooter({ text: 'Press "Send Challenge" once everything looks good.' })
+    .setTimestamp();
+}
+
+function buildBattleSetupComponents(state, { disabled = false } = {}) {
+  const gameOptions = GAME_CHOICES.map((choice) => ({
+    label: choice.label,
+    value: choice.value,
+    emoji: choice.emoji,
+    default: state.game === choice.value,
+  }));
+
+  const amountOptions = PRESET_WAGER_AMOUNTS.map((amount) => ({
+    label: formatVP(amount),
+    value: amount.toString(),
+    default: state.amount === amount,
+  }));
+
+  if (state.amount && !PRESET_WAGER_AMOUNTS.includes(state.amount)) {
+    amountOptions.unshift({
+      label: `Custom: ${formatVP(state.amount)}`,
+      value: `custom:${state.amount}`,
+      default: true,
+    });
+  }
+
+  const gameRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('battle_setup_game')
+      .setPlaceholder('Select a game')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(gameOptions)
+      .setDisabled(disabled)
+  );
+
+  const wagerRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('battle_setup_wager')
+      .setPlaceholder('Select a wager')
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(amountOptions)
+      .setDisabled(disabled)
+  );
+
+  const opponentMenu = new UserSelectMenuBuilder()
+    .setCustomId('battle_setup_opponent')
+    .setPlaceholder('Choose an opponent')
+    .setMinValues(1)
+    .setMaxValues(1)
+    .setDisabled(disabled);
+
+  if (state.opponentId) {
+    opponentMenu.setDefaultUsers(state.opponentId);
+  }
+
+  const opponentRow = new ActionRowBuilder().addComponents(opponentMenu);
+
+  const confirmRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('battle_setup_confirm')
+      .setLabel('Send Challenge')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(disabled || !state.amount || !state.opponentId),
+    new ButtonBuilder()
+      .setCustomId('battle_setup_cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled)
+  );
+
+  return [gameRow, wagerRow, opponentRow, confirmRow];
+}
+
+async function notifyInactiveBattleSetup(interaction) {
+  if (!interaction.deferred && !interaction.replied) {
+    try {
+      await interaction.update({
+        content: '❌ This battle setup is no longer active. Use `/battle` to start a new challenge.',
+        embeds: [],
+        components: [],
+      });
+      return;
+    } catch (error) {
+      try {
+        await interaction.reply({
+          content: '❌ This battle setup is no longer active. Use `/battle` to start a new challenge.',
+          ephemeral: true,
+        });
+        return;
+      } catch (replyError) {
+        console.error('Failed to notify about inactive battle setup:', replyError);
+      }
+    }
+  }
+}
+
+async function handleBattleSetupGame(interaction) {
+  const state = getBattleSetupState(interaction.user.id);
+
+  if (!state || state.messageId !== interaction.message.id) {
+    await notifyInactiveBattleSetup(interaction);
+    return;
+  }
+
+  const [selectedGame] = interaction.values;
+  state.game = selectedGame;
+
+  saveBattleSetupState(interaction.user.id, state);
+
+  const embed = buildBattleSetupEmbed(interaction.user, state);
+  const components = buildBattleSetupComponents(state);
+
+  await interaction.update({ embeds: [embed], components });
+}
+
+async function handleBattleSetupWager(interaction) {
+  const state = getBattleSetupState(interaction.user.id);
+
+  if (!state || state.messageId !== interaction.message.id) {
+    await notifyInactiveBattleSetup(interaction);
+    return;
+  }
+
+  const [rawValue] = interaction.values;
+  const parsedValue = rawValue.startsWith('custom:')
+    ? parseInt(rawValue.split(':')[1], 10)
+    : parseInt(rawValue, 10);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    await interaction.reply({
+      content: '❌ Please choose a valid wager amount.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  state.amount = parsedValue;
+
+  saveBattleSetupState(interaction.user.id, state);
+
+  const embed = buildBattleSetupEmbed(interaction.user, state);
+  const components = buildBattleSetupComponents(state);
+
+  await interaction.update({ embeds: [embed], components });
+}
+
+async function handleBattleSetupOpponent(interaction) {
+  const state = getBattleSetupState(interaction.user.id);
+
+  if (!state || state.messageId !== interaction.message.id) {
+    await notifyInactiveBattleSetup(interaction);
+    return;
+  }
+
+  const [selectedUserId] = interaction.values;
+
+  if (selectedUserId === interaction.user.id) {
+    await interaction.reply({
+      content: '❌ You cannot challenge yourself.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const opponent = await interaction.client.users.fetch(selectedUserId).catch(() => null);
+
+  if (!opponent) {
+    await interaction.reply({
+      content: '❌ Unable to find that user. Please try again.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (opponent.bot) {
+    await interaction.reply({
+      content: '❌ You cannot challenge bots to battles.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  state.opponentId = opponent.id;
+
+  saveBattleSetupState(interaction.user.id, state);
+
+  const embed = buildBattleSetupEmbed(interaction.user, state);
+  const components = buildBattleSetupComponents(state);
+
+  await interaction.update({ embeds: [embed], components });
+}
+
+async function handleBattleSetupCancel(interaction) {
+  const state = getBattleSetupState(interaction.user.id);
+
+  if (!state || state.messageId !== interaction.message.id) {
+    await notifyInactiveBattleSetup(interaction);
+    return;
+  }
+
+  clearBattleSetupState(interaction.user.id);
+
+  await interaction.update({
+    content: '❌ Battle setup canceled.',
+    embeds: [],
+    components: [],
+  });
+}
+
+async function handleBattleSetupConfirm(interaction) {
+  const state = getBattleSetupState(interaction.user.id);
+
+  if (!state || state.messageId !== interaction.message.id) {
+    await notifyInactiveBattleSetup(interaction);
+    return;
+  }
+
+  if (!state.amount || !state.opponentId) {
+    await interaction.reply({
+      content: '❌ Please choose both a wager amount and an opponent before sending the challenge.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (state.channelId && state.channelId !== interaction.channelId) {
+    await interaction.reply({
+      content: '❌ This battle setup was created in a different channel. Please use `/battle` again there.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const opponent = await interaction.client.users.fetch(state.opponentId).catch(() => null);
+
+  if (!opponent) {
+    await interaction.reply({
+      content: '❌ I could not find that opponent. Please select them again.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (!interaction.channel) {
+    await interaction.reply({
+      content: '❌ Unable to locate the channel for this challenge. Try again in a guild channel.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  let success = false;
+
+  try {
+    await createBattleChallenge({
+      channel: interaction.channel,
+      challenger: interaction.user,
+      opponent,
+      amount: state.amount,
+      game: state.game,
+    });
+
+    const confirmationEmbed = buildBattleSetupEmbed(interaction.user, state).setDescription(
+      '✅ Challenge sent! Your opponent has been pinged with an Accept/Decline panel.'
+    );
+
+    await interaction.message.edit({
+      embeds: [confirmationEmbed],
+      components: buildBattleSetupComponents(state, { disabled: true }),
+    });
+
+    await interaction.editReply({
+      content: `✅ Challenge sent to <@${opponent.id}> for ${formatVP(state.amount)} playing ${getGameDisplayName(state.game)}!`,
+    });
+
+    success = true;
+  } catch (error) {
+    console.error('Error creating battle challenge:', error);
+    const message = error instanceof Error ? error.message : 'Failed to create battle. Please try again.';
+    await interaction.editReply({ content: `❌ ${message}` });
+  }
+
+  if (success) {
+    clearBattleSetupState(interaction.user.id);
+  }
+}
+
+async function createBattleChallenge({ channel, challenger, opponent, amount, game }) {
+  if (opponent.bot) {
+    throw new Error('You cannot challenge bots to battles.');
+  }
+
+  if (challenger.id === opponent.id) {
+    throw new Error('You cannot challenge yourself.');
+  }
+
+  const challengerUser = await getOrCreateUser(challenger.id);
+  const opponentUser = await getOrCreateUser(opponent.id);
+
+  if (challengerUser.blacklisted) {
+    throw new Error('You are blacklisted and cannot participate in battles.');
+  }
+
+  if (opponentUser.blacklisted) {
+    throw new Error('This user is blacklisted and cannot participate in battles.');
+  }
+
+  if (await hasActiveBattle(challenger.id)) {
+    throw new Error('You already have an active battle. Finish it first.');
+  }
+
+  if (await hasActiveBattle(opponent.id)) {
+    throw new Error('This user already has an active battle.');
+  }
+
+  if (challengerUser.vp < amount) {
+    throw new Error(
+      `Insufficient balance. You need ${formatVP(amount)}, but you only have ${formatVP(challengerUser.vp)}.`
+    );
+  }
+
+  if (opponentUser.vp < amount) {
+    throw new Error(
+      `Opponent has insufficient balance. They need ${formatVP(amount)}, but they only have ${formatVP(opponentUser.vp)}.`
+    );
+  }
+
+  const battle = await prisma.battle.create({
+    data: {
+      challengerId: challengerUser.id,
+      opponentId: opponentUser.id,
+      game,
+      amount,
+      status: 'open',
+      state: JSON.stringify({}),
+    },
+  });
+
+  const challengeEmbed = new EmbedBuilder()
+    .setColor(0xffd700)
+    .setTitle(`🎮 Battle Challenge: ${getGameDisplayName(game)}`)
+    .setDescription(`**${challenger.username}** challenges **${opponent.username}**!`)
+    .addFields(
+      { name: 'Wager', value: formatVP(amount), inline: true },
+      { name: 'Game', value: getGameDisplayName(game), inline: true },
+      { name: 'Status', value: '⏳ Awaiting Response', inline: true }
+    )
+    .setFooter({ text: 'You have 60 seconds to accept or decline' })
+    .setTimestamp();
+
+  const actionRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`battle_accept_${battle.id}`)
+      .setLabel('✅ Accept')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`battle_decline_${battle.id}`)
+      .setLabel('❌ Decline')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  const message = await channel.send({
+    content: `<@${opponent.id}>`,
+    embeds: [challengeEmbed],
+    components: [actionRow],
+  });
+
+  setTimeout(async () => {
+    try {
+      const currentBattle = await prisma.battle.findUnique({ where: { id: battle.id } });
+
+      if (currentBattle && currentBattle.status === 'open') {
+        await prisma.battle.update({
+          where: { id: battle.id },
+          data: { status: 'canceled' },
+        });
+
+        const timeoutEmbed = new EmbedBuilder()
+          .setColor(0xff0000)
+          .setTitle('⏰ Battle Expired')
+          .setDescription('The challenge was not accepted in time.')
+          .setTimestamp();
+
+        await message.edit({
+          embeds: [timeoutEmbed],
+          components: [],
+        });
+      }
+    } catch (error) {
+      console.error('Error in battle timeout:', error);
+    }
+  }, 60000);
+
+  return { battle, message };
+}
+
 export const data = new SlashCommandBuilder()
   .setName('battle')
   .setDescription('Challenge another user to a 1v1 game')
   .addUserOption((option) =>
-    option.setName('user').setDescription('User to challenge').setRequired(true)
+    option.setName('user').setDescription('User to challenge').setRequired(false)
   )
   .addIntegerOption((option) =>
     option
       .setName('amount')
       .setDescription('Amount of VP to wager')
-      .setRequired(true)
+      .setRequired(false)
       .setMinValue(1)
   )
   .addStringOption((option) =>
@@ -51,154 +512,88 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction, _client) {
-  const opponent = interaction.options.getUser('user');
-  const amount = interaction.options.getInteger('amount');
-  const gameType = interaction.options.getString('game') || 'rps';
   const challenger = interaction.user;
+  const opponentOption = interaction.options.getUser('user');
+  const amountOption = interaction.options.getInteger('amount');
+  const gameType = interaction.options.getString('game') || 'rps';
 
-  // Validation
-  if (opponent.bot) {
-    return interaction.reply({
-      content: '❌ You cannot challenge bots to battles.',
-      ephemeral: true,
-    });
+  if (opponentOption) {
+    if (opponentOption.bot) {
+      return interaction.reply({
+        content: '❌ You cannot challenge bots to battles.',
+        ephemeral: true,
+      });
+    }
+
+    if (opponentOption.id === challenger.id) {
+      return interaction.reply({
+        content: '❌ You cannot challenge yourself.',
+        ephemeral: true,
+      });
+    }
   }
 
-  if (opponent.id === challenger.id) {
-    return interaction.reply({
-      content: '❌ You cannot challenge yourself.',
-      ephemeral: true,
-    });
-  }
+  const initialState = {
+    challengerId: challenger.id,
+    opponentId: opponentOption?.id ?? null,
+    amount: amountOption ?? null,
+    game: gameType,
+    channelId: interaction.channelId,
+    messageId: null,
+  };
 
-  try {
-    await interaction.deferReply();
+  const embed = buildBattleSetupEmbed(challenger, initialState);
+  const components = buildBattleSetupComponents(initialState);
 
-    // Get users
-    const challengerUser = await getOrCreateUser(challenger.id);
-    const opponentUser = await getOrCreateUser(opponent.id);
+  const reply = await interaction.reply({
+    embeds: [embed],
+    components,
+    ephemeral: true,
+  });
 
-    // Check blacklist
-    if (challengerUser.blacklisted) {
-      return interaction.editReply({
-        content: '❌ You are blacklisted and cannot participate in battles.',
-      });
-    }
-
-    if (opponentUser.blacklisted) {
-      return interaction.editReply({
-        content: '❌ This user is blacklisted and cannot participate in battles.',
-      });
-    }
-
-    // Check active battles
-    if (await hasActiveBattle(challenger.id)) {
-      return interaction.editReply({
-        content: '❌ You already have an active battle. Finish it first.',
-      });
-    }
-
-    if (await hasActiveBattle(opponent.id)) {
-      return interaction.editReply({
-        content: '❌ This user already has an active battle.',
-      });
-    }
-
-    // Check balances
-    if (challengerUser.vp < amount) {
-      return interaction.editReply({
-        content: `❌ Insufficient balance. You need ${formatVP(amount)}, but you only have ${formatVP(challengerUser.vp)}.`,
-      });
-    }
-
-    if (opponentUser.vp < amount) {
-      return interaction.editReply({
-        content: `❌ Opponent has insufficient balance. They need ${formatVP(amount)}, but they only have ${formatVP(opponentUser.vp)}.`,
-      });
-    }
-
-    // Create battle
-    const battle = await prisma.battle.create({
-      data: {
-        challengerId: challengerUser.id,
-        opponentId: opponentUser.id,
-        game: gameType,
-        amount,
-        status: 'open',
-        state: JSON.stringify({}),
-      },
-    });
-
-    // Create challenge embed
-    const embed = new EmbedBuilder()
-      .setColor(0xffd700)
-      .setTitle(`🎮 Battle Challenge: ${getGameDisplayName(gameType)}`)
-      .setDescription(`**${challenger.username}** challenges **${opponent.username}**!`)
-      .addFields(
-        { name: 'Wager', value: formatVP(amount), inline: true },
-        { name: 'Game', value: getGameDisplayName(gameType), inline: true },
-        { name: 'Status', value: '⏳ Awaiting Response', inline: true }
-      )
-      .setFooter({ text: 'You have 60 seconds to accept or decline' })
-      .setTimestamp();
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`battle_accept_${battle.id}`)
-        .setLabel('✅ Accept')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`battle_decline_${battle.id}`)
-        .setLabel('❌ Decline')
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    const message = await interaction.editReply({
-      content: `<@${opponent.id}>`,
-      embeds: [embed],
-      components: [row],
-    });
-
-    // Set timeout for auto-cancel
-    setTimeout(async () => {
-      try {
-        const currentBattle = await prisma.battle.findUnique({ where: { id: battle.id } });
-
-        if (currentBattle && currentBattle.status === 'open') {
-          await prisma.battle.update({
-            where: { id: battle.id },
-            data: { status: 'canceled' },
-          });
-
-          const timeoutEmbed = new EmbedBuilder()
-            .setColor(0xff0000)
-            .setTitle('⏰ Battle Expired')
-            .setDescription('The challenge was not accepted in time.')
-            .setTimestamp();
-
-          await message.edit({
-            embeds: [timeoutEmbed],
-            components: [],
-          });
-        }
-      } catch (error) {
-        console.error('Error in battle timeout:', error);
-      }
-    }, 60000); // 60 seconds
-  } catch (error) {
-    console.error('Error in battle command:', error);
-    await interaction.editReply({
-      content: '❌ Failed to create battle. Please try again.',
-    });
-  }
+  initialState.messageId = reply.id;
+  saveBattleSetupState(challenger.id, initialState);
 }
 
 export async function handleBattleInteraction(interaction) {
+  const customId = interaction.customId;
+
+  if (interaction.isStringSelectMenu()) {
+    if (customId === 'battle_setup_game') {
+      await handleBattleSetupGame(interaction);
+      return true;
+    }
+
+    if (customId === 'battle_setup_wager') {
+      await handleBattleSetupWager(interaction);
+      return true;
+    }
+
+    return false;
+  }
+
+  if (interaction.isUserSelectMenu()) {
+    if (customId === 'battle_setup_opponent') {
+      await handleBattleSetupOpponent(interaction);
+      return true;
+    }
+
+    return false;
+  }
+
   if (!interaction.isButton()) {
     return false;
   }
 
-  const customId = interaction.customId;
+  if (customId === 'battle_setup_confirm') {
+    await handleBattleSetupConfirm(interaction);
+    return true;
+  }
+
+  if (customId === 'battle_setup_cancel') {
+    await handleBattleSetupCancel(interaction);
+    return true;
+  }
 
   // Battle accept/decline
   if (customId.startsWith('battle_accept_') || customId.startsWith('battle_decline_')) {
