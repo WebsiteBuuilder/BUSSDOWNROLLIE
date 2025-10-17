@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import prisma from '../db/index.js';
-import { formatVP, formatTimestamp, buildMessageLink } from '../lib/utils.js';
+import { formatVP, formatTimestamp, buildMessageLink, memberHasProviderRole } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
 
 const MAX_VOUCHES_PER_VIEW = 10;
@@ -96,7 +96,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   const member = await interaction.guild.members.fetch(interaction.user.id);
-  if (!member.roles.cache.has(process.env.PROVIDER_ROLE_ID)) {
+  if (!memberHasProviderRole(member)) {
     return interaction.reply({
       content: '❌ Only providers can approve vouches.',
       ephemeral: true,
@@ -121,7 +121,7 @@ export async function execute(interaction) {
 
 export async function handleApproveVouchButton(interaction) {
   const member = await interaction.guild.members.fetch(interaction.user.id);
-  if (!member.roles.cache.has(process.env.PROVIDER_ROLE_ID)) {
+  if (!memberHasProviderRole(member)) {
     return interaction.reply({
       content: '❌ Only providers can approve vouches.',
       ephemeral: true,

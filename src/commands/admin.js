@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import prisma, { getOrCreateUser, setConfig, getConfig } from '../db/index.js';
-import { formatVP, exportToCSV } from '../lib/utils.js';
+import { formatVP, exportToCSV, memberHasProviderRole } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
 
 export const data = new SlashCommandBuilder()
@@ -91,26 +91,13 @@ export const data = new SlashCommandBuilder()
     subcommand.setName('export').setDescription('Export all user balances as CSV')
   );
 
-function hasProviderAccess(member) {
-  const providerRoleId = process.env.PROVIDER_ROLE_ID;
-
-  if (providerRoleId && member.roles.cache.has(providerRoleId)) {
-    return true;
-  }
-
-  return member.roles.cache.some((role) => {
-    const name = role.name.toLowerCase();
-    return name.includes('provider') || name.includes('staff');
-  });
-}
-
 export async function execute(interaction) {
   const adminRoleId = process.env.ADMIN_ROLE_ID;
 
   // Check if user has admin or provider role
   const member = await interaction.guild.members.fetch(interaction.user.id);
   const hasAdminRole = adminRoleId ? member.roles.cache.has(adminRoleId) : false;
-  const hasProviderRole = hasProviderAccess(member);
+  const hasProviderRole = memberHasProviderRole(member);
 
   if (!hasAdminRole && !hasProviderRole) {
     return interaction.reply({

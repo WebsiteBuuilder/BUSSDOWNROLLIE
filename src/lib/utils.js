@@ -110,6 +110,37 @@ export function mentionsRole(message, roleId) {
   return message.mentions.roles.has(roleId);
 }
 
+function parseRoleIds(raw) {
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(/[\s,]+/)
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+export function getProviderRoleIds() {
+  return parseRoleIds(process.env.PROVIDER_ROLE_ID);
+}
+
+export function memberHasProviderRole(member) {
+  const providerRoleIds = getProviderRoleIds();
+
+  if (providerRoleIds.length > 0) {
+    const hasConfiguredRole = providerRoleIds.some((roleId) => member.roles.cache.has(roleId));
+    if (hasConfiguredRole) {
+      return true;
+    }
+  }
+
+  return member.roles.cache.some((role) => {
+    const name = role.name?.toLowerCase?.();
+    return name?.includes('provider') || name?.includes('staff');
+  });
+}
+
 /**
  * Calculate transfer fee
  */

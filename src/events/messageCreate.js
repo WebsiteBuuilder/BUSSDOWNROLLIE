@@ -1,4 +1,4 @@
-import { hasImageAttachment, getFirstImageUrl } from '../lib/utils.js';
+import { hasImageAttachment, getFirstImageUrl, getProviderRoleIds } from '../lib/utils.js';
 import prisma, { getOrCreateUser } from '../db/index.js';
 import { logTransaction } from '../lib/logger.js';
 
@@ -44,7 +44,7 @@ export async function execute(message) {
       return; // Silently ignore duplicate
     }
 
-    const providerRoleId = process.env.PROVIDER_ROLE_ID;
+    const providerRoleIds = getProviderRoleIds();
 
     const mentions = message.mentions ?? {};
 
@@ -54,13 +54,17 @@ export async function execute(message) {
       Boolean(mentions.everyone);
 
     let providerRoleMentioned = false;
-    if (providerRoleId) {
+    if (providerRoleIds.length > 0) {
       const memberHasRole =
         typeof mentions.members?.some === 'function'
-          ? mentions.members.some((member) => member?.roles?.cache?.has?.(providerRoleId))
+          ? mentions.members.some((member) =>
+              providerRoleIds.some((roleId) => member?.roles?.cache?.has?.(roleId))
+            )
           : false;
       const roleCollectionHasRole =
-        typeof mentions.roles?.has === 'function' ? mentions.roles.has(providerRoleId) : false;
+        typeof mentions.roles?.has === 'function'
+          ? providerRoleIds.some((roleId) => mentions.roles.has(roleId))
+          : false;
 
       providerRoleMentioned = memberHasRole || roleCollectionHasRole;
     }

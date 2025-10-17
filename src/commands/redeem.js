@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import prisma, { getOrCreateUser, getConfig } from '../db/index.js';
-import { formatVP } from '../lib/utils.js';
+import { formatVP, getProviderRoleIds, memberHasProviderRole } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
 
 export const data = new SlashCommandBuilder()
@@ -59,6 +59,12 @@ export async function execute(interaction) {
     }
 
     // Create private ticket channel
+    const providerRoleIds = getProviderRoleIds();
+    const providerPermissionOverwrites = providerRoleIds.map((roleId) => ({
+      id: roleId,
+      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
+    }));
+
     const ticketChannel = await interaction.guild.channels.create({
       name: `redemption-${interaction.user.username}-${Date.now()}`,
       type: ChannelType.GuildText,
@@ -71,10 +77,7 @@ export async function execute(interaction) {
           id: interaction.user.id,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
         },
-        {
-          id: process.env.PROVIDER_ROLE_ID,
-          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
-        },
+        ...providerPermissionOverwrites,
         {
           id: interaction.client.user.id,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages],
@@ -115,8 +118,12 @@ export async function execute(interaction) {
       .setFooter({ text: 'A provider will assist you shortly!' })
       .setTimestamp();
 
+    const providerMentions = providerRoleIds.map((roleId) => `<@&${roleId}>`).join(' ');
+
     await ticketChannel.send({
-      content: `<@${interaction.user.id}> <@&${process.env.PROVIDER_ROLE_ID}>`,
+      content: providerMentions
+        ? `<@${interaction.user.id}> ${providerMentions}`
+        : `<@${interaction.user.id}>`,
       embeds: [ticketEmbed],
     });
 
@@ -168,7 +175,7 @@ export async function execute(interaction) {
 async function handleFulfill(interaction) {
   // Check if user has provider role
   const member = await interaction.guild.members.fetch(interaction.user.id);
-  if (!member.roles.cache.has(process.env.PROVIDER_ROLE_ID)) {
+  if (!memberHasProviderRole(member)) {
     return interaction.reply({
       content: '❌ Only providers can fulfill redemptions.',
       ephemeral: true,
