@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ChannelType } from 'discord.js';
+import { ChannelType, MessageFlags } from 'discord.js';
 
 import { ensureCasinoChannel } from '../src/lib/casino-guard.js';
 
@@ -74,7 +74,7 @@ describe('ensureCasinoChannel', () => {
     expect(result.ok).toBe(false);
     expect(interaction.reply).toHaveBeenCalledWith(
       expect.objectContaining({
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       })
     );
   });
@@ -87,7 +87,7 @@ describe('ensureCasinoChannel', () => {
     expect(result.ok).toBe(false);
     expect(interaction.reply).toHaveBeenCalledWith(
       expect.objectContaining({
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       })
     );
   });

@@ -1,4 +1,10 @@
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  MessageFlags,
+  PermissionFlagsBits,
+  ChannelType,
+} from 'discord.js';
 import prisma, { getOrCreateUser, getConfig } from '../db/index.js';
 import { formatVP, getProviderRoleIds, memberHasProviderRole } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -35,7 +41,7 @@ export async function execute(interaction) {
   const type = subcommand === 'five' ? '5USD' : 'FREE_ORDER';
 
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const user = await getOrCreateUser(interaction.user.id);
 
@@ -178,7 +184,7 @@ async function handleFulfill(interaction) {
   if (!memberHasProviderRole(member)) {
     return interaction.reply({
       content: '❌ Only providers can fulfill redemptions.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 

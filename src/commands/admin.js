@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder, MessageFlags } from 'discord.js';
 import prisma, { getOrCreateUser, setConfig, getConfig } from '../db/index.js';
 import { formatVP, exportToCSV, memberHasProviderRole } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -129,7 +129,7 @@ export async function execute(interaction) {
   if (!hasAdminRole && !hasProviderRole) {
     return interaction.reply({
       content: '❌ You do not have permission to use admin commands.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -471,21 +471,21 @@ async function handleDailyChance(interaction) {
   if (!['add', 'remove', 'set'].includes(action)) {
     return interaction.reply({
       content: '❌ Invalid action. Please choose add, remove, or set.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
   if (action !== 'set' && (!Number.isFinite(amount) || amount <= 0)) {
     return interaction.reply({
       content: '❌ Please provide a positive amount to adjust.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
   if (action === 'set' && !Number.isFinite(amount)) {
     return interaction.reply({
       content: '❌ Please provide a numeric amount to set.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -604,7 +604,7 @@ async function handleConfig(interaction) {
       const currentValue = await getConfig(key);
       return interaction.reply({
         content: `Current value of **${key}**: \`${currentValue}\`\n\nTo update, provide a value: \`/admin config ${key} <new_value>\``,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -633,7 +633,7 @@ async function handleConfig(interaction) {
 
 async function handleExport(interaction) {
   try {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const users = await prisma.user.findMany({
       orderBy: { vp: 'desc' },

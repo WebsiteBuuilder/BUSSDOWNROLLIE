@@ -30,7 +30,6 @@ export async function execute(message) {
     if (user.blacklisted) {
       await message.reply({
         content: '❌ You are blacklisted and cannot earn VP.',
-        ephemeral: true,
       });
       return;
     }

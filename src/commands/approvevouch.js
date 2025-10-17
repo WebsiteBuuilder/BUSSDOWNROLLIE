@@ -1,4 +1,10 @@
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  SlashCommandBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  MessageFlags,
+} from 'discord.js';
 import prisma from '../db/index.js';
 import { formatVP, formatTimestamp, buildMessageLink, memberHasProviderRole } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -99,11 +105,11 @@ export async function execute(interaction) {
   if (!memberHasProviderRole(member)) {
     return interaction.reply({
       content: '❌ Only providers can approve vouches.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     const { vouches, total } = await fetchPendingVouches();
@@ -124,7 +130,7 @@ export async function handleApproveVouchButton(interaction) {
   if (!memberHasProviderRole(member)) {
     return interaction.reply({
       content: '❌ Only providers can approve vouches.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -134,11 +140,11 @@ export async function handleApproveVouchButton(interaction) {
   if (!Number.isInteger(vouchId)) {
     return interaction.reply({
       content: '❌ Invalid vouch identifier.',
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     const vouch = await prisma.vouch.findUnique({
