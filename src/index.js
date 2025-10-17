@@ -4,12 +4,11 @@ import { dirname, join } from 'path';
 import { readdirSync } from 'fs';
 import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
-import { handleBattle, routeBattleButton } from './commands/battle.js';
+import { handleBattle, handleBattleGameSelect, BATTLE_MENU_NAMESPACE } from './commands/battle.js';
 import { handleBlackjackInteraction } from './commands/blackjack.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
 import { logger } from './logger.js';
-import { BATTLE_NAMESPACE, parseCustomId } from './types.js';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);
@@ -186,12 +185,6 @@ client.on('interactionCreate', async (interaction) => {
 
     if (interaction.isButton()) {
       const customId = interaction.customId ?? '';
-      const [ns, action, battleId, allowedUserId] = parseCustomId(customId);
-
-      if (ns === BATTLE_NAMESPACE) {
-        await routeBattleButton(action, battleId, allowedUserId, interaction);
-        return;
-      }
 
       if (customId.startsWith('approvevouch:')) {
         await handleApproveVouchButton(interaction);
@@ -201,6 +194,15 @@ client.on('interactionCreate', async (interaction) => {
       if (customId.startsWith('bj_')) {
         await handleBlackjackInteraction(interaction);
         return;
+      }
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId?.startsWith(`${BATTLE_MENU_NAMESPACE}:`)) {
+        const handled = await handleBattleGameSelect(interaction);
+        if (handled) {
+          return;
+        }
       }
     }
   } catch (err) {
