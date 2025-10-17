@@ -7,7 +7,7 @@ export function createRPSGame() {
   return {
     type: 'rps',
     challengerChoice: null,
-    opponentChoice: null
+    opponentChoice: null,
   };
 }
 
@@ -19,7 +19,7 @@ export function resolveRPS(challengerChoice, opponentChoice) {
   const wins = {
     rock: 'scissors',
     paper: 'rock',
-    scissors: 'paper'
+    scissors: 'paper',
   };
 
   return wins[challengerChoice] === opponentChoice ? 'challenger' : 'opponent';
@@ -44,7 +44,7 @@ export function createHighCardGame() {
   return {
     type: 'highcard',
     challengerCard: shuffled[0],
-    opponentCard: shuffled[1]
+    opponentCard: shuffled[1],
   };
 }
 
@@ -72,7 +72,7 @@ export function createDiceGame() {
     challengerRolls,
     opponentRolls,
     challengerTotal,
-    opponentTotal
+    opponentTotal,
   };
 }
 
@@ -93,7 +93,7 @@ export function createHiLoGame() {
     type: 'hilow',
     number: randomInt(1, 100),
     challengerChoice: null,
-    opponentChoice: null
+    opponentChoice: null,
   };
 }
 
@@ -104,7 +104,7 @@ export function resolveHiLo(game) {
   }
 
   const isHigh = game.number > 50;
-  
+
   // Challenger chose high
   if (game.challengerChoice === 'high') {
     return isHigh ? 'challenger' : 'opponent';
@@ -124,8 +124,8 @@ export function createReactionGame() {
     startTime: null,
     clickedAt: {
       challenger: null,
-      opponent: null
-    }
+      opponent: null,
+    },
   };
 }
 
@@ -152,7 +152,7 @@ export function resolveReaction(game) {
   } else if (opponentTime < challengerTime) {
     return 'opponent';
   }
-  
+
   return 'tie';
 }
 
@@ -172,8 +172,7 @@ export function getGameDisplayName(gameType) {
     highcard: 'High Card',
     dice: 'Dice Duel',
     hilow: 'Hi-Lo',
-    reaction: 'Reaction Duel'
+    reaction: 'Reaction Duel',
   };
   return names[gameType] || gameType;
 }
-

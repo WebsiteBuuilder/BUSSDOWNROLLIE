@@ -15,10 +15,7 @@ export function initLogger(channel) {
 export async function logTransaction(type, data) {
   if (!logChannel) return;
 
-  const embed = new EmbedBuilder()
-    .setTitle('💰 VP Transaction')
-    .setColor(0x00FF00)
-    .setTimestamp();
+  const embed = new EmbedBuilder().setTitle('💰 VP Transaction').setColor(0x00ff00).setTimestamp();
 
   switch (type) {
     case 'vouch':
@@ -82,7 +79,7 @@ export async function logTransaction(type, data) {
       break;
 
     case 'admin':
-      embed.setColor(0xFF9900);
+      embed.setColor(0xff9900);
       embed.addFields(
         { name: 'Type', value: 'Admin Action', inline: true },
         { name: 'Admin', value: `<@${data.adminId}>`, inline: true },
@@ -105,11 +102,11 @@ export async function logTransaction(type, data) {
  */
 export async function logError(error, context = '') {
   console.error(`[ERROR] ${context}:`, error);
-  
+
   if (logChannel) {
     const embed = new EmbedBuilder()
       .setTitle('❌ Error')
-      .setColor(0xFF0000)
+      .setColor(0xff0000)
       .setDescription(`\`\`\`${error.message || error}\`\`\``)
       .addFields({ name: 'Context', value: context || 'Unknown' })
       .setTimestamp();
@@ -121,4 +118,3 @@ export async function logError(error, context = '') {
     }
   }
 }
-

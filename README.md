@@ -5,12 +5,14 @@ A production-ready Discord bot for GUHD EATS, featuring a complete vouch-based v
 ## 🌟 Features
 
 ### 💰 VP Economy System
+
 - **Vouch System**: Post food photos with provider mentions to earn VP instantly
 - **Daily Claims**: Random daily VP with configurable success rate
 - **Transfers**: Send VP to other users with automatic fee calculation
 - **Redemptions**: Redeem VP for $5 orders or free $20 orders via private tickets
 
 ### 🎮 Games & Entertainment
+
 - **5 Battle Games**:
   - 🪨📄✂️ Rock Paper Scissors
   - 🎴 High Card
@@ -21,6 +23,7 @@ A production-ready Discord bot for GUHD EATS, featuring a complete vouch-based v
 - **🏆 Leaderboard**: Compete for top VP rankings
 
 ### 🛠️ Admin Tools
+
 - VP management (add/remove/set)
 - User blacklisting
 - Configurable economy settings
@@ -42,25 +45,34 @@ A production-ready Discord bot for GUHD EATS, featuring a complete vouch-based v
 - Discord Bot Token ([Create one here](https://discord.com/developers/applications))
 - A Discord server for testing
 
+### Required Gateway Intents & Partials
+
+- **Gateway Intents**: Guilds, Guild Members, Guild Messages, Message Content
+- **Partials**: None (the bot only operates on fully available channel data)
+
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone https://github.com/WebsiteBuuilder/BUSSDOWNROLLIE.git
    cd BUSSDOWNROLLIE
    ```
 
 2. **Install dependencies**
+
    ```bash
    npm install
    ```
 
 3. **Set up environment variables**
+
    ```bash
    cp .env.example .env
    ```
-   
+
    Edit `.env` and fill in your values:
+
    ```env
    DISCORD_TOKEN=your_bot_token_here
    GUILD_ID=your_guild_id_here
@@ -72,11 +84,13 @@ A production-ready Discord bot for GUHD EATS, featuring a complete vouch-based v
    ```
 
 4. **Set up database**
+
    ```bash
    npx prisma migrate dev
    ```
 
 5. **Seed sample data (optional)**
+
    ```bash
    npm run seed
    ```
@@ -86,11 +100,25 @@ A production-ready Discord bot for GUHD EATS, featuring a complete vouch-based v
    npm run dev
    ```
 
+### Slash Command Registration
+
+- Commands are registered automatically when the bot emits the `ready` event.
+- Set `GUILD_ID` in `.env` during development for instant guild-scoped updates.
+- Remove `GUILD_ID` (or leave it empty) to publish commands globally once changes are stable (may take up to 1 hour to propagate).
+
+### Blackjack Configuration & Casino Channel
+
+- Set `CASINO_CHANNEL_ID` to the text channel where casino games are permitted (for example, `#casino`).
+- Slash commands invoked outside that channel—or in DMs—receive an ephemeral reminder to move to the casino.
+- Threads created under the casino channel are treated as valid blackjack tables.
+- Only one blackjack round per user is allowed at a time; use `/blackjack cancel` to end and refund an in-progress game.
+
 ### Finding Discord IDs
 
 Enable **Developer Mode** in Discord (User Settings → Advanced → Developer Mode), then:
+
 - **Server ID**: Right-click server icon → Copy Server ID
-- **Role IDs**: Server Settings → Roles → Right-click role → Copy Role ID  
+- **Role IDs**: Server Settings → Roles → Right-click role → Copy Role ID
 - **Channel IDs**: Right-click channel → Copy Channel ID
 
 ## 🐳 Docker Deployment
@@ -197,51 +225,52 @@ cp data/guhdeats.db data/backup-$(date +%Y%m%d).db
 
 ### User Commands
 
-| Command | Description |
-|---------|-------------|
-| `/balance [@user]` | Check VP balance |
-| `/send @user <amount>` | Transfer VP to another user |
-| `/daily` | Claim random daily VP (24h cooldown) |
-| `/battle @user <amount> [game]` | Challenge user to 1v1 game |
-| `/blackjack play <bet>` | Start blackjack game |
-| `/blackjack rules` | View blackjack rules |
-| `/leaderboard [page]` | View top VP holders |
-| `/redeem five` | Redeem $5 order (25 VP) |
-| `/redeem free` | Redeem free order (60 VP) |
+| Command                         | Description                                          |
+| ------------------------------- | ---------------------------------------------------- |
+| `/balance [@user]`              | Check VP balance                                     |
+| `/send @user <amount>`          | Transfer VP to another user                          |
+| `/daily`                        | Claim random daily VP (24h cooldown)                 |
+| `/battle @user <amount> [game]` | Challenge user to 1v1 game                           |
+| `/blackjack play <bet>`         | Start blackjack game                                 |
+| `/blackjack cancel`             | Cancel your active blackjack game and refund the bet |
+| `/blackjack rules`              | View blackjack rules                                 |
+| `/leaderboard [page]`           | View top VP holders                                  |
+| `/redeem five`                  | Redeem $5 order (25 VP)                              |
+| `/redeem free`                  | Redeem free order (60 VP)                            |
 
 ### Provider Commands
 
-| Command | Description |
-|---------|-------------|
-| `/approvevouch <message_link>` | Manually approve a vouch |
+| Command                           | Description                 |
+| --------------------------------- | --------------------------- |
+| `/approvevouch <message_link>`    | Manually approve a vouch    |
 | `/redeem fulfill <redemption_id>` | Mark redemption as complete |
 
 ### Admin Commands
 
-| Command | Description |
-|---------|-------------|
-| `/admin add @user <amount>` | Add VP to user |
-| `/admin remove @user <amount>` | Remove VP from user |
-| `/admin set @user <amount>` | Set exact VP balance |
-| `/admin blacklist @user` | Blacklist user |
-| `/admin unblacklist @user` | Remove blacklist |
-| `/admin config [key] [value]` | View/update config |
-| `/admin export` | Export all data as CSV |
+| Command                        | Description            |
+| ------------------------------ | ---------------------- |
+| `/admin add @user <amount>`    | Add VP to user         |
+| `/admin remove @user <amount>` | Remove VP from user    |
+| `/admin set @user <amount>`    | Set exact VP balance   |
+| `/admin blacklist @user`       | Blacklist user         |
+| `/admin unblacklist @user`     | Remove blacklist       |
+| `/admin config [key] [value]`  | View/update config     |
+| `/admin export`                | Export all data as CSV |
 
 ## ⚙️ Configuration
 
 All economy settings can be adjusted via `/admin config`:
 
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `daily_rng_chance` | 0.35 | Daily claim success rate (35%) |
-| `transfer_fee_percent` | 5 | Transfer fee percentage |
-| `battle_rake_percent` | 2 | House cut from battles |
-| `bj_min` | 1 | Minimum blackjack bet |
-| `bj_max` | 50 | Maximum blackjack bet |
-| `five_cost` | 25 | VP cost for $5 order |
-| `free_cost` | 60 | VP cost for free order |
-| `daily_amount` | 1 | VP amount for daily claim |
+| Setting                | Default | Description                    |
+| ---------------------- | ------- | ------------------------------ |
+| `daily_rng_chance`     | 0.35    | Daily claim success rate (35%) |
+| `transfer_fee_percent` | 5       | Transfer fee percentage        |
+| `battle_rake_percent`  | 2       | House cut from battles         |
+| `bj_min`               | 1       | Minimum blackjack bet          |
+| `bj_max`               | 50      | Maximum blackjack bet          |
+| `five_cost`            | 25      | VP cost for $5 order           |
+| `free_cost`            | 60      | VP cost for free order         |
+| `daily_amount`         | 1       | VP amount for daily claim      |
 
 ## 🔒 Discord Bot Setup
 
@@ -257,9 +286,10 @@ All economy settings can be adjusted via `/admin config`:
 ### 2. Enable Privileged Intents
 
 In the Bot section, enable:
-- ✅ **Presence Intent**
+
 - ✅ **Server Members Intent**
 - ✅ **Message Content Intent**
+  (Presence intent is optional for this project.)
 
 ### 3. Generate Invite Link
 
@@ -282,14 +312,20 @@ In the Bot section, enable:
 ## 🧪 Testing
 
 ```bash
-# Run all tests
+# Run ESLint across src/ and tests/
+npm run lint
+
+# Check formatting with Prettier
+npm run format
+
+# Run all unit tests once
 npm test
 
 # Run tests in watch mode
 npm run test:watch
 
-# Run specific test file
-npx vitest run tests/vouch.test.js
+# Run a specific test file
+npx vitest run tests/blackjack.command.test.js
 ```
 
 ## 🎯 Vouch System Flow
@@ -358,6 +394,17 @@ npx vitest run tests/vouch.test.js
 - **Transaction Safety**: Database transactions for all multi-step operations
 - **Rate Limiting**: Per-user command cooldowns
 - **Input Validation**: All amounts verified before processing
+
+## ✅ QA Checklist
+
+Use this runbook before deploying changes:
+
+- [ ] Slash command works inside the configured `CASINO_CHANNEL_ID` (e.g., `#casino`).
+- [ ] Commands invoked outside the casino channel respond with an ephemeral warning.
+- [ ] Blackjack works inside threads that belong to the casino channel.
+- [ ] DMs are rejected with an ephemeral explanation.
+- [ ] Logs contain no “undefined channel to play in” errors or unhandled promise rejections.
+- [ ] `npm run lint`, `npm run format`, and `npm test` complete without failures.
 - **Audit Trail**: Complete logging of all VP changes
 
 ## 📝 Troubleshooting
@@ -392,6 +439,7 @@ railway run node -e "const { REST } = require('@discordjs/rest'); const rest = n
 ## 📈 Monitoring & Logs
 
 All VP transactions are logged to `LOG_CHANNEL_ID` with:
+
 - Transaction type
 - Users involved
 - Amounts
@@ -399,6 +447,7 @@ All VP transactions are logged to `LOG_CHANNEL_ID` with:
 - Results
 
 View Railway logs:
+
 ```bash
 railway logs --tail
 ```
@@ -425,6 +474,7 @@ This project is licensed under the MIT License.
 ## 💡 Support
 
 For issues or questions:
+
 1. Check this README thoroughly
 2. Review Railway logs for errors
 3. Open an issue on GitHub
@@ -433,4 +483,3 @@ For issues or questions:
 ---
 
 **Made with ❤️ for GUHD EATS Community** 🍔💰
-

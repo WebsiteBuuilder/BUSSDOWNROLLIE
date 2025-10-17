@@ -19,11 +19,11 @@ export function formatTimestamp(date, style = 'F') {
 export function parseMessageLink(link) {
   const match = link.match(/https:\/\/discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
   if (!match) return null;
-  
+
   return {
     guildId: match[1],
     channelId: match[2],
-    messageId: match[3]
+    messageId: match[3],
   };
 }
 
@@ -66,7 +66,7 @@ export function hasImageAttachment(message) {
   }
 
   if (Array.isArray(message.embeds)) {
-    return message.embeds.some(embed => Boolean(getEmbedImageUrl(embed)));
+    return message.embeds.some((embed) => Boolean(getEmbedImageUrl(embed)));
   }
 
   return false;
@@ -83,7 +83,7 @@ export function getFirstImageUrl(message) {
   }
 
   if (Array.isArray(message.embeds)) {
-    const embedWithImage = message.embeds.find(embed => Boolean(getEmbedImageUrl(embed)));
+    const embedWithImage = message.embeds.find((embed) => Boolean(getEmbedImageUrl(embed)));
     if (embedWithImage) {
       return getEmbedImageUrl(embedWithImage);
     }
@@ -148,7 +148,7 @@ export function randomInt(min, max) {
  * Sleep for ms milliseconds
  */
 export function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -156,11 +156,11 @@ export function sleep(ms) {
  */
 export function exportToCSV(users) {
   let csv = 'Discord ID,VP Balance,Streak Days,Blacklisted,Created At\n';
-  
+
   for (const user of users) {
     csv += `${user.discordId},${user.vp},${user.streakDays},${user.blacklisted},${user.createdAt}\n`;
   }
-  
+
   return csv;
 }
 
@@ -169,10 +169,14 @@ export function exportToCSV(users) {
  */
 export function getMedalEmoji(rank) {
   switch (rank) {
-    case 1: return '🥇';
-    case 2: return '🥈';
-    case 3: return '🥉';
-    default: return '';
+    case 1:
+      return '🥇';
+    case 2:
+      return '🥈';
+    case 3:
+      return '🥉';
+    default:
+      return '';
   }
 }
 
@@ -181,10 +185,10 @@ export function getMedalEmoji(rank) {
  */
 export function createErrorEmbed(message) {
   return {
-    color: 0xFF0000,
+    color: 0xff0000,
     title: '❌ Error',
     description: message,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -193,10 +197,9 @@ export function createErrorEmbed(message) {
  */
 export function createSuccessEmbed(title, description) {
   return {
-    color: 0x00FF00,
+    color: 0x00ff00,
     title: `✅ ${title}`,
     description,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
-
