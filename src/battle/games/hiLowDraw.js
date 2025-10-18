@@ -1,5 +1,7 @@
 import crypto from 'crypto';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { presentGame } from '../../ui/presentGame.js';
+import { labelForUser } from '../../ui/labelForUser.js';
 
 const suits = ['♠', '♥', '♦', '♣'];
 const ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
@@ -9,7 +11,7 @@ function createDeck() {
   for (const suit of suits) {
     for (let index = 0; index < ranks.length; index += 1) {
       const rank = ranks[index];
-      deck.push({ rank, suit, value: index });
+      deck.push({ rank, suit, value: index + 2 });
     }
   }
   return deck;
@@ -28,222 +30,245 @@ function formatCard(card) {
   return `${card.rank}${card.suit}`;
 }
 
+const ROUND_TARGET = 3;
+const ROUND_TIMEOUT_MS = 15000;
+
 export const hiLowDrawGame = {
   key: 'hi_low_draw',
-  name: 'Hi–Low Draw',
+  name: 'HI-LO Showdown',
   async start(ctx) {
     const deck = shuffleDeck(createDeck());
     let deckIndex = 0;
     let round = 1;
-    const scores = { challenger: 0, opponent: 0 };
 
-    async function concludeMatch(winnerKey, reason) {
-      const winnerId = winnerKey === 'challenger' ? ctx.challengerId : ctx.opponentId;
-      const loserId = winnerKey === 'challenger' ? ctx.opponentId : ctx.challengerId;
-      await ctx.end(winnerId, loserId, {
-        summary: `Final score ${scores.challenger}-${scores.opponent}. ${reason ?? ''}`.trim(),
-      });
-    }
-
-    const drawState = {
-      challenger: null,
-      opponent: null,
+    const scores = {
+      p1: 0,
+      p2: 0,
     };
+
+    const draws = {
+      p1: null,
+      p2: null,
+    };
+
+    const playerLabel = (slot, options = {}) =>
+      labelForUser(slot === 'p1' ? ctx.p1 : ctx.p2, slot === 'p1' ? ctx.challengerId : ctx.opponentId, {
+        fallback: slot === 'p1' ? 'Player 1' : 'Player 2',
+        ...options,
+      });
 
     function nextCard() {
       if (deckIndex >= deck.length) {
-        throw new Error('deck exhausted');
+        throw new Error('Deck exhausted');
       }
       const card = deck[deckIndex];
       deckIndex += 1;
       return card;
     }
 
-    async function renderRound(message, buttons = true) {
-      ctx.clearActions();
-
-      const embed = new EmbedBuilder()
-        .setTitle(`Hi–Low Draw — Round ${round}`)
-        .setColor(0x1abc9c)
-        .setDescription(
-          [
-            `First to 3 round wins. Stake: ${ctx.amount} VP`,
-            '',
-            `Score — <@${ctx.challengerId}>: **${scores.challenger}** | <@${ctx.opponentId}>: **${scores.opponent}**`,
-            '',
-            message ?? 'Both players click **Draw** to reveal cards simultaneously.',
-          ].join('\n')
-        );
-
-      if (drawState.challenger) {
-        embed.addFields({
-          name: `Challenger`,
-          value: `${formatCard(drawState.challenger)}`,
-          inline: true,
-        });
-      } else {
-        embed.addFields({ name: 'Challenger', value: 'Awaiting draw…', inline: true });
-      }
-
-      if (drawState.opponent) {
-        embed.addFields({ name: 'Opponent', value: `${formatCard(drawState.opponent)}`, inline: true });
-      } else {
-        embed.addFields({ name: 'Opponent', value: 'Awaiting draw…', inline: true });
-      }
-
-      const components = [];
-      if (buttons) {
-        const row = new ActionRowBuilder();
-        const challengerDisabled = Boolean(drawState.challenger);
-        const opponentDisabled = Boolean(drawState.opponent);
-
-        if (!challengerDisabled) {
-          const challengerId = ctx.registerAction(`hldraw-${round}-challenger`, async (interaction) => {
-            if (interaction.user.id !== ctx.challengerId) {
-              await interaction.reply({ ephemeral: true, content: 'This button is for the challenger.' });
-              return;
-            }
-            await handleDraw('challenger', interaction);
-          });
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(challengerId)
-              .setStyle(ButtonStyle.Primary)
-              .setLabel('Draw (Challenger)')
-          );
-        } else {
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(ctx.makeId(`noop-${round}-c`))
-              .setStyle(ButtonStyle.Secondary)
-              .setLabel('Drawn')
-              .setDisabled(true)
-          );
-        }
-
-        if (!opponentDisabled) {
-          const opponentId = ctx.registerAction(`hldraw-${round}-opponent`, async (interaction) => {
-            if (interaction.user.id !== ctx.opponentId) {
-              await interaction.reply({ ephemeral: true, content: 'This button is for the opponent.' });
-              return;
-            }
-            await handleDraw('opponent', interaction);
-          });
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(opponentId)
-              .setStyle(ButtonStyle.Primary)
-              .setLabel('Draw (Opponent)')
-          );
-        } else {
-          row.addComponents(
-            new ButtonBuilder()
-              .setCustomId(ctx.makeId(`noop-${round}-o`))
-              .setStyle(ButtonStyle.Secondary)
-              .setLabel('Drawn')
-              .setDisabled(true)
-          );
-        }
-
-        components.push(row);
-      }
-
-      await ctx.render({ embeds: [embed], components });
+    function resetRoundState() {
+      draws.p1 = null;
+      draws.p2 = null;
     }
 
-    function scheduleRoundTimeout(playerKey) {
-      const timeoutKey = `round-${round}-${playerKey}`;
-      ctx.setTimeout(timeoutKey, 10_000, async () => {
-        const winnerKey = playerKey === 'challenger' ? 'opponent' : 'challenger';
+    async function conclude(winnerKey, summary) {
+      const winnerId = winnerKey === 'p1' ? ctx.challengerId : ctx.opponentId;
+      const loserId = winnerKey === 'p1' ? ctx.opponentId : ctx.challengerId;
+      await ctx.end(winnerId, loserId, { summary });
+    }
+
+    function scheduleTimeout(slot) {
+      clearTimeoutFor(slot);
+      ctx.setTimeout(`hi-lo-${round}-${slot}`, ROUND_TIMEOUT_MS, async () => {
+        const winnerKey = slot === 'p1' ? 'p2' : 'p1';
         scores[winnerKey] += 1;
-        drawState.challenger = null;
-        drawState.opponent = null;
-        const forfeiterId = playerKey === 'challenger' ? ctx.challengerId : ctx.opponentId;
-        const message = `<@${forfeiterId}> did not draw in time — round awarded to <@${winnerKey === 'challenger' ? ctx.challengerId : ctx.opponentId}>.`;
-        await renderRound(message, false);
-        await handleRoundEnd(winnerKey, true);
+        await render(
+          `⏳ ${playerLabel(slot, { emphasize: true })} hesitated too long! Point awarded to ${playerLabel(
+            winnerKey,
+            { emphasize: true }
+          )}.`
+        );
+        if (scores[winnerKey] >= ROUND_TARGET) {
+          await conclude(winnerKey, 'Victory by timeout.');
+          return;
+        }
+        round += 1;
+        resetRoundState();
+        await render('✨ Shuffling for the next duel...');
+        scheduleTimeout('p1');
+        scheduleTimeout('p2');
       });
     }
 
-    async function handleDraw(playerKey, interaction) {
-      ctx.clearTimeout(`round-${round}-${playerKey}`);
-      await interaction.deferUpdate();
-      drawState[playerKey] = nextCard();
-      await renderRound('Waiting for both players to draw…');
-      await evaluateRound();
+    function clearTimeoutFor(slot) {
+      const key = `hi-lo-${round}-${slot}`;
+      ctx.clearTimeout(key);
     }
 
-    async function evaluateRound() {
-      if (!drawState.challenger || !drawState.opponent) {
-        return;
-      }
+    function bothDrew() {
+      return Boolean(draws.p1 && draws.p2);
+    }
 
-      const challengerCard = drawState.challenger;
-      const opponentCard = drawState.opponent;
+    function buildButtons() {
+      const row = new ActionRowBuilder();
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            ctx.registerAction({ player: 'p1', action: `draw-${round}` }, async (interaction) => {
+              if (interaction.user.id !== ctx.challengerId) {
+                await interaction.reply({ ephemeral: true, content: 'This is for the challenger only.' });
+                return;
+              }
+              clearTimeoutFor('p1');
+              draws.p1 = nextCard();
+              await interaction.deferUpdate();
+              await render('🎴 Cards slide onto the table...');
+              if (bothDrew()) {
+                await resolveRound();
+              }
+            })
+          )
+          .setLabel(draws.p1 ? 'Waiting for other player…' : `🎴 Draw — ${playerLabel('p1')}`)
+          .setStyle(draws.p1 ? ButtonStyle.Secondary : ButtonStyle.Primary)
+          .setDisabled(Boolean(draws.p1))
+      );
 
-      if (challengerCard.value === opponentCard.value) {
-        drawState.challenger = null;
-        drawState.opponent = null;
-        await renderRound('Tie on rank — redraw immediately!');
-        scheduleRoundTimeout('challenger');
-        scheduleRoundTimeout('opponent');
-        return;
-      }
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            ctx.registerAction({ player: 'p2', action: `draw-${round}` }, async (interaction) => {
+              if (interaction.user.id !== ctx.opponentId) {
+                await interaction.reply({ ephemeral: true, content: 'This is for your opponent.' });
+                return;
+              }
+              clearTimeoutFor('p2');
+              draws.p2 = nextCard();
+              await interaction.deferUpdate();
+              await render('🎴 Cards slide onto the table...');
+              if (bothDrew()) {
+                await resolveRound();
+              }
+            })
+          )
+          .setLabel(draws.p2 ? 'Waiting for other player…' : `🎴 Draw — ${playerLabel('p2')}`)
+          .setStyle(draws.p2 ? ButtonStyle.Secondary : ButtonStyle.Primary)
+          .setDisabled(Boolean(draws.p2))
+      );
 
-      const winnerKey = challengerCard.value > opponentCard.value ? 'challenger' : 'opponent';
-      scores[winnerKey] += 1;
+      return [row];
+    }
 
-      const winnerId = winnerKey === 'challenger' ? ctx.challengerId : ctx.opponentId;
-      const loserId = winnerKey === 'challenger' ? ctx.opponentId : ctx.challengerId;
-      await ctx.render({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`Hi–Low Draw — Round ${round}`)
-            .setColor(0x1abc9c)
-            .setDescription(
-              [
-                `Cards revealed!`,
-                `• <@${ctx.challengerId}> drew **${formatCard(challengerCard)}**`,
-                `• <@${ctx.opponentId}> drew **${formatCard(opponentCard)}**`,
-                '',
-                `<@${winnerId}> wins the round!`,
-                '',
-                `Score — <@${ctx.challengerId}>: **${scores.challenger}** | <@${ctx.opponentId}>: **${scores.opponent}**`,
-              ].join('\n')
-            ),
+    async function render(message) {
+      await presentGame(ctx, {
+        title: '🎴 HI-LO Showdown',
+        description: message ?? 'Both players tap **Draw** to flip their fate!',
+        fields: [
+          {
+            name: 'Scoreboard',
+            value: `${playerLabel('p1', { emphasize: true })}: ${scores.p1}\n${playerLabel('p2', {
+              emphasize: true,
+            })}: ${scores.p2}`,
+          },
+          {
+            name: 'Current Reveals',
+            value: `${playerLabel('p1')}: ${
+              draws.p1 ? `**${formatCard(draws.p1)}**` : '🕒 Hidden'
+            }\n${playerLabel('p2')}: ${draws.p2 ? `**${formatCard(draws.p2)}**` : '🕒 Hidden'}`,
+          },
+          {
+            name: 'Round',
+            value: `${round} / First to ${ROUND_TARGET}`,
+            inline: true,
+          },
         ],
-        components: [],
+        components: bothDrew() ? [] : buildButtons(),
+        status: 'neutral',
       });
-
-      drawState.challenger = null;
-      drawState.opponent = null;
-
-      await handleRoundEnd(winnerKey, false);
     }
 
-    async function handleRoundEnd(winnerKey, fromForfeit) {
-      ctx.clearTimeout(`round-${round}-challenger`);
-      ctx.clearTimeout(`round-${round}-opponent`);
+    async function resolveRound() {
+      const p1Card = draws.p1;
+      const p2Card = draws.p2;
 
-      if (scores[winnerKey] >= 3) {
-        await concludeMatch(winnerKey, fromForfeit ? 'Win via opponent timeout.' : undefined);
+      if (!p1Card || !p2Card) return;
+
+      let winnerKey = null;
+      let message = '💥 Cards collide in mid-air!';
+
+      if (p1Card.value === p2Card.value) {
+        message = '🤝 Tie! Both warriors drew the same strength. Redraw!';
+        await presentGame(ctx, {
+          title: '🎴 HI-LO Showdown',
+          description: message,
+          fields: [
+            {
+              name: 'Reveals',
+              value: `${playerLabel('p1')}: **${formatCard(p1Card)}**\n${playerLabel('p2')}: **${formatCard(
+                p2Card
+              )}**`,
+            },
+            {
+              name: 'Scoreboard',
+              value: `${playerLabel('p1', { emphasize: true })}: ${scores.p1}\n${playerLabel('p2', {
+                emphasize: true,
+              })}: ${scores.p2}`,
+              inline: true,
+            },
+          ],
+          components: [],
+          status: 'neutral',
+        });
+        resetRoundState();
+        round += 1;
+        scheduleTimeout('p1');
+        scheduleTimeout('p2');
+        await render('🔄 Shuffling tie-breaker cards...');
         return;
       }
 
-      if (round >= 5) {
-        const overallWinner = scores.challenger > scores.opponent ? 'challenger' : 'opponent';
-        await concludeMatch(overallWinner);
+      if (p1Card.value > p2Card.value) {
+        winnerKey = 'p1';
+        scores.p1 += 1;
+        message = `🟩 ${formatCard(p1Card)} overwhelms ${formatCard(p2Card)}! Point to ${playerLabel('p1', {
+          emphasize: true,
+        })}.`;
+      } else {
+        winnerKey = 'p2';
+        scores.p2 += 1;
+        message = `🟩 ${formatCard(p2Card)} slashes past ${formatCard(p1Card)}! Point to ${playerLabel('p2', {
+          emphasize: true,
+        })}.`;
+      }
+
+      resetRoundState();
+
+      await presentGame(ctx, {
+        title: '🎴 HI-LO Showdown',
+        description: message,
+        fields: [
+          {
+            name: 'Scoreboard',
+            value: `${playerLabel('p1', { emphasize: true })}: ${scores.p1}\n${playerLabel('p2', {
+              emphasize: true,
+            })}: ${scores.p2}`,
+          },
+        ],
+        status: scores.p1 === scores.p2 ? 'neutral' : scores.p1 > scores.p2 ? 'victory' : 'defeat',
+      });
+
+      if (scores[winnerKey] >= ROUND_TARGET) {
+        await conclude(winnerKey, `Final score ${scores.p1}-${scores.p2}.`);
         return;
       }
 
       round += 1;
-      await renderRound('Next round — draw your cards!');
-      scheduleRoundTimeout('challenger');
-      scheduleRoundTimeout('opponent');
+      scheduleTimeout('p1');
+      scheduleTimeout('p2');
+      await render('✨ Fresh steel glimmers. Tap Draw!');
     }
 
-    await renderRound('Both players click **Draw** to reveal cards.');
-    scheduleRoundTimeout('challenger');
-    scheduleRoundTimeout('opponent');
+    scheduleTimeout('p1');
+    scheduleTimeout('p2');
+    await render('🔥 The arena ignites! First to three wins.');
   },
 };
