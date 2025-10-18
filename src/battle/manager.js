@@ -12,6 +12,121 @@ import { formatVP } from '../lib/utils.js';
 import { battleGames, getGameByKey } from './registry.js';
 import { logger } from '../logger.js';
 
+const nowMs = () => Date.now();
+
+async function fetchMemberSafe(guild, userId) {
+  if (!guild || !userId) return null;
+  const cached = guild.members?.cache?.get(userId);
+  if (cached) return cached;
+  try {
+    return await guild.members.fetch(userId);
+  } catch (error) {
+    logger.debug?.('battle manager: failed to fetch guild member', { userId, guildId: guild.id, err: error });
+    return null;
+  }
+}
+
+async function fetchUserSafe(client, userId) {
+  if (!client || !userId) return null;
+  const cached = client.users?.cache?.get(userId);
+  if (cached) return cached;
+  try {
+    return await client.users.fetch(userId);
+  } catch (error) {
+    logger.debug?.('battle manager: failed to fetch user', { userId, err: error });
+    return null;
+  }
+}
+
+function formatTag(user, userId) {
+  if (!user) return userId ?? 'unknown#0000';
+  if (user.tag) return user.tag;
+  const username = user.username ?? 'unknown';
+  const discriminator = user.discriminator ?? '0000';
+  return `${username}#${discriminator}`;
+}
+
+function formatDisplayName(member, user) {
+  if (member?.displayName) return member.displayName;
+  if (user?.username) return user.username;
+  if (user?.tag) return user.tag;
+  return 'Unknown';
+}
+
+async function buildPlayerInfo({ guild, client, userId, fallbackMember, fallbackUser }) {
+  if (!userId) {
+    return { id: null, tag: 'unknown#0000', displayName: 'Unknown' };
+  }
+
+  const member = fallbackMember ?? (await fetchMemberSafe(guild, userId));
+  const user = fallbackUser ?? member?.user ?? (await fetchUserSafe(client, userId));
+
+  return {
+    id: userId,
+    tag: formatTag(user, userId),
+    displayName: formatDisplayName(member, user),
+  };
+}
+
+async function resolveBattlePlayers(battle, guild) {
+  if (!battle) {
+    return { p1: null, p2: null };
+  }
+
+  const resolvedGuild = guild ?? battle.guild ?? null;
+  if (resolvedGuild && !battle.guild) {
+    battle.guild = resolvedGuild;
+    battle.guildId = resolvedGuild.id;
+  }
+
+  const client = battle.interaction?.client ?? battle.client ?? resolvedGuild?.client ?? null;
+
+  let challengerMember =
+    battle.challengerMember ?? resolvedGuild?.members?.cache?.get(battle.challengerId) ?? null;
+  if (!challengerMember && resolvedGuild) {
+    challengerMember = await fetchMemberSafe(resolvedGuild, battle.challengerId);
+  }
+  if (challengerMember && !battle.challengerMember) {
+    battle.challengerMember = challengerMember;
+  }
+
+  let opponentMember =
+    battle.opponentMember && battle.opponentId
+      ? battle.opponentMember
+      : battle.opponentId
+      ? resolvedGuild?.members?.cache?.get(battle.opponentId) ?? null
+      : null;
+  if (!opponentMember && resolvedGuild && battle.opponentId) {
+    opponentMember = await fetchMemberSafe(resolvedGuild, battle.opponentId);
+  }
+  if (opponentMember && !battle.opponentMember) {
+    battle.opponentMember = opponentMember;
+  }
+
+  const p1 = await buildPlayerInfo({
+    guild: resolvedGuild,
+    client,
+    userId: battle.challengerId,
+    fallbackMember: challengerMember,
+    fallbackUser: battle.challengerUser,
+  });
+
+  const p2 = battle.opponentId
+    ? await buildPlayerInfo({
+        guild: resolvedGuild,
+        client,
+        userId: battle.opponentId,
+        fallbackMember: opponentMember,
+        fallbackUser: battle.opponentUser,
+      })
+    : null;
+
+  battle.p1 = p1;
+  battle.p2 = p2;
+
+  return { p1, p2 };
+}
+
 const ACTIVE_BATTLES = new Map();
 export const BATTLE_CUSTOM_ID_PREFIX = 'battle';
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -21,7 +136,7 @@ function randomId() {
 }
 
 class BattleState {
-  constructor({ interaction, opponent, amount, type }) {
+  constructor({ interaction, opponent, opponentUser, opponentMember, amount, type }) {
     this.id = randomId();
     this.interaction = interaction;
     this.channelId = interaction.channelId;
@@ -37,6 +152,15 @@ class BattleState {
     this.resolved = false;
     this.game = null;
     this.snapshot = null;
+    this.client = interaction.client;
+    this.guildId = interaction.guildId ?? null;
+    this.guild = interaction.guild ?? null;
+    this.challengerMember = interaction.member ?? null;
+    this.challengerUser = interaction.user;
+    this.opponentMember = opponentMember ?? null;
+    this.opponentUser = opponentUser ?? null;
+    this.p1 = null;
+    this.p2 = null;
   }
 
   makeId(suffix) {
@@ -235,7 +359,15 @@ function gameSelectRow(battle) {
 }
 
 export async function createDirectBattle(interaction, opponent, amount) {
-  const battle = new BattleState({ interaction, opponent: opponent.id, amount, type: 'direct' });
+  const opponentMember = interaction.guild?.members?.cache?.get(opponent.id) ?? null;
+  const battle = new BattleState({
+    interaction,
+    opponent: opponent.id,
+    opponentUser: opponent,
+    opponentMember,
+    amount,
+    type: 'direct',
+  });
   ACTIVE_BATTLES.set(battle.id, battle);
 
   await interaction.deferReply();
@@ -268,7 +400,14 @@ export async function createDirectBattle(interaction, opponent, amount) {
 }
 
 export async function createOpenBattle(interaction, amount) {
-  const battle = new BattleState({ interaction, opponent: null, amount, type: 'open' });
+  const battle = new BattleState({
+    interaction,
+    opponent: null,
+    opponentUser: null,
+    opponentMember: null,
+    amount,
+    type: 'open',
+  });
   ACTIVE_BATTLES.set(battle.id, battle);
 
   await interaction.deferReply();
@@ -387,6 +526,8 @@ async function handleJoin(interaction, battle) {
       return;
     }
 
+    b.opponentMember = interaction.member ?? i.member ?? b.opponentMember ?? null;
+    b.opponentUser = interaction.user;
     b.opponentId = interaction.user.id;
     b.status = 'selecting';
     b.clearActions();
@@ -548,7 +689,13 @@ export async function handleBattleSelect(interaction) {
 
   await interaction.deferUpdate();
 
+  const { p1, p2 } = await resolveBattlePlayers(battle, interaction.guild);
+
   const context = {
+    battleId: battle.id,
+    nowMs,
+    p1,
+    p2,
     challengerId: battle.challengerId,
     opponentId: battle.opponentId,
     amount: battle.amount,
