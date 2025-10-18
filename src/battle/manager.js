@@ -8,9 +8,9 @@ import {
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import prisma, { getOrCreateUser } from '../db/index.js';
-import { formatVP } from '../lib/utils.js';
 import { battleGames, getGameByKey } from './registry.js';
 import { logger } from '../logger.js';
+import { labelForUser } from '../ui/labelForUser.js';
 
 const nowMs = () => Date.now();
 
@@ -128,7 +128,7 @@ async function resolveBattlePlayers(battle, guild) {
 }
 
 const ACTIVE_BATTLES = new Map();
-export const BATTLE_CUSTOM_ID_PREFIX = 'battle';
+export const BATTLE_CUSTOM_ID_PREFIX = 'b';
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 function randomId() {
@@ -163,13 +163,13 @@ class BattleState {
     this.p2 = null;
   }
 
-  makeId(suffix) {
+  makeId({ player = 'sys', action = 'noop' }) {
     this.turn += 1;
-    return `${BATTLE_CUSTOM_ID_PREFIX}:${this.id}:${this.turn}:${suffix}`;
+    return `${BATTLE_CUSTOM_ID_PREFIX}:${this.id}:${player}:${action}:${this.turn}`;
   }
 
-  registerAction(suffix, handler) {
-    const id = this.makeId(suffix);
+  registerAction({ player = 'sys', action = 'noop' }, handler) {
+    const id = this.makeId({ player, action });
     this.actionHandlers.set(id, handler);
     return id;
   }
@@ -204,61 +204,69 @@ class BattleState {
   }
 }
 
-function challengeEmbed({ challengerId, opponentId, amount, footer }) {
-  const embed = new EmbedBuilder()
-    .setTitle('Battle Challenge')
-    .setColor(0xff9f43)
-    .setDescription(
-      [
-        `Challenger: <@${challengerId}>`,
-        `Opponent: <@${opponentId}>`,
-        `Stake: ${formatVP(amount)}`,
-        '',
-        'Waiting for a response…',
-      ].join('\n')
-    );
+const EMBED_COLORS = {
+  neutral: 0x2b2d31,
+  victory: 0x57f287,
+  defeat: 0xed4245,
+};
 
-  if (footer) {
-    embed.setFooter({ text: footer });
-  }
+function playerLine(battle) {
+  const challenger = battle.p1 ?? { id: battle.challengerId, displayName: `<@${battle.challengerId}>` };
+  const opponent = battle.p2
+    ? battle.p2
+    : battle.opponentId
+    ? { id: battle.opponentId, displayName: `<@${battle.opponentId}>` }
+    : null;
 
-  return embed;
+  const left = labelForUser(challenger, challenger.id);
+  const right = opponent ? labelForUser(opponent, opponent.id) : 'Awaiting opponent…';
+  return `${left} 🆚 ${right}`;
 }
 
-function openInviteEmbed({ challengerId, amount, footer }) {
-  const embed = new EmbedBuilder()
-    .setTitle('Open Battle Invite')
-    .setColor(0x5865f2)
-    .setDescription(
-      [
-        `<@${challengerId}> is ready to battle anyone!`,
-        `Stake: ${formatVP(amount)}`,
-        '',
-        'Press **Join** to accept this duel.',
-      ].join('\n')
-    );
-
-  if (footer) {
-    embed.setFooter({ text: footer });
-  }
-
-  return embed;
-}
-
-function resultsEmbed({ winnerId, loserId, gameName, amount, summary }) {
+function challengeEmbed(battle, { statusText = 'Waiting for a response…', status = 'neutral' } = {}) {
   return new EmbedBuilder()
-    .setTitle('Battle Results')
-    .setColor(0x57f287)
+    .setTitle('⚔️ Battle Challenge')
+    .setColor(EMBED_COLORS[status] ?? EMBED_COLORS.neutral)
+    .setDescription([
+      playerLine(battle),
+      '',
+      `Stake: ${battle.amount} points`,
+      statusText,
+    ].join('\n'))
+    .setFooter({ text: `💰 Total Wager: ${battle.amount} points` });
+}
+
+function openInviteEmbed(battle) {
+  return new EmbedBuilder()
+    .setTitle('⚔️ Open Battle Invite')
+    .setColor(EMBED_COLORS.neutral)
+    .setDescription([
+      playerLine(battle),
+      '',
+      `Stake: ${battle.amount} points`,
+      'Press **Join** to accept this duel.',
+    ].join('\n'))
+    .setFooter({ text: `💰 Total Wager: ${battle.amount} points` });
+}
+
+function resultsEmbed(battle, { winnerId, loserId, gameName, amount, summary }) {
+  const winner = winnerId === battle.challengerId ? battle.p1 : battle.p2;
+  const loser = loserId === battle.challengerId ? battle.p1 : battle.p2;
+  const winnerLabel = labelForUser(winner ?? { id: winnerId, displayName: `<@${winnerId}>` }, winnerId);
+  const loserLabel = labelForUser(loser ?? { id: loserId, displayName: `<@${loserId}>` }, loserId);
+
+  return new EmbedBuilder()
+    .setTitle('🏁 Battle Results')
+    .setColor(EMBED_COLORS.victory)
     .setDescription(
       [
-        `🏆 Winner: <@${winnerId}>`,
-        `💀 Loser: <@${loserId}>`,
+        `🏆 ${winnerLabel}`,
+        `💀 ${loserLabel}`,
         `🎮 Game: ${gameName}`,
-        `💰 Stake: ${formatVP(amount)}`,
-        '',
-        summary ?? 'GGs!'
-      ].join('\n')
+        summary ?? 'GGs!',
+      ].join('\n\n')
     )
+    .setFooter({ text: `💰 Total Wager: ${amount} points` })
     .setTimestamp();
 }
 
@@ -293,7 +301,8 @@ async function finalizeBattle(battle, winnerId, loserId, { summary } = {}) {
   await settleBattle(battle, winnerId, loserId);
 
   if (battle.message) {
-    const embed = resultsEmbed({
+    await resolveBattlePlayers(battle, battle.guild ?? null);
+    const embed = resultsEmbed(battle, {
       winnerId,
       loserId,
       gameName: battle.game?.name ?? 'Battle',
@@ -319,11 +328,11 @@ function ensureParticipant(interaction, battle) {
 function acceptButtons(battle) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(battle.registerAction('accept', handleAccept))
+      .setCustomId(battle.registerAction({ player: 'p2', action: 'accept' }, handleAccept))
       .setLabel('Accept')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(battle.registerAction('decline', handleDecline))
+      .setCustomId(battle.registerAction({ player: 'p2', action: 'decline' }, handleDecline))
       .setLabel('Decline')
       .setStyle(ButtonStyle.Danger)
   );
@@ -334,7 +343,7 @@ function acceptButtons(battle) {
 function joinButton(battle) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(battle.registerAction('join', handleJoin))
+      .setCustomId(battle.registerAction({ player: 'p2', action: 'join' }, handleJoin))
       .setLabel('Join')
       .setStyle(ButtonStyle.Primary)
   );
@@ -344,7 +353,7 @@ function joinButton(battle) {
 
 function gameSelectRow(battle) {
   const select = new StringSelectMenuBuilder()
-    .setCustomId(battle.makeId('select'))
+    .setCustomId(battle.makeId({ player: 'sys', action: 'select' }))
     .setPlaceholder('Pick a battle game');
 
   for (const game of battleGames) {
@@ -371,8 +380,9 @@ export async function createDirectBattle(interaction, opponent, amount) {
   ACTIVE_BATTLES.set(battle.id, battle);
 
   await interaction.deferReply();
+  await resolveBattlePlayers(battle, interaction.guild);
   battle.message = await interaction.editReply({
-    embeds: [challengeEmbed({ challengerId: battle.challengerId, opponentId: battle.opponentId, amount })],
+    embeds: [challengeEmbed(battle)],
     components: acceptButtons(battle),
   });
 
@@ -381,15 +391,9 @@ export async function createDirectBattle(interaction, opponent, amount) {
     battle.status = 'expired';
     battle.clearActions();
     if (battle.message) {
+      await resolveBattlePlayers(battle, interaction.guild);
       await battle.message.edit({
-        embeds: [
-          challengeEmbed({
-            challengerId: battle.challengerId,
-            opponentId: battle.opponentId,
-            amount,
-            footer: 'Challenge expired — no response.',
-          }),
-        ],
+        embeds: [challengeEmbed(battle, { statusText: 'Challenge expired — no response.', status: 'defeat' })],
         components: [],
       });
     }
@@ -411,8 +415,9 @@ export async function createOpenBattle(interaction, amount) {
   ACTIVE_BATTLES.set(battle.id, battle);
 
   await interaction.deferReply();
+  await resolveBattlePlayers(battle, interaction.guild);
   battle.message = await interaction.editReply({
-    embeds: [openInviteEmbed({ challengerId: battle.challengerId, amount })],
+    embeds: [openInviteEmbed(battle)],
     components: joinButton(battle),
   });
 
@@ -421,8 +426,9 @@ export async function createOpenBattle(interaction, amount) {
     battle.status = 'expired';
     battle.clearActions();
     if (battle.message) {
+      await resolveBattlePlayers(battle, interaction.guild);
       await battle.message.edit({
-        embeds: [openInviteEmbed({ challengerId: battle.challengerId, amount, footer: 'Invite expired after 60 seconds.' })],
+        embeds: [challengeEmbed(battle, { statusText: 'Invite expired after 60 seconds.', status: 'defeat' })],
         components: [],
       });
     }
@@ -450,15 +456,9 @@ async function handleAccept(interaction, battle) {
   battle.clearTimeout('accept');
 
   if (battle.message) {
+    await resolveBattlePlayers(battle, interaction.guild);
     await battle.message.edit({
-      embeds: [
-        challengeEmbed({
-          challengerId: battle.challengerId,
-          opponentId: battle.opponentId,
-          amount: battle.amount,
-          footer: 'Challenge accepted! Choose a game.',
-        }),
-      ],
+      embeds: [challengeEmbed(battle, { statusText: 'Challenge accepted! Choose a game.' })],
       components: gameSelectRow(battle),
     });
   }
@@ -482,15 +482,9 @@ async function handleDecline(interaction, battle) {
   battle.clearTimeout('accept');
 
   if (battle.message) {
+    await resolveBattlePlayers(battle, interaction.guild);
     await battle.message.edit({
-      embeds: [
-        challengeEmbed({
-          challengerId: battle.challengerId,
-          opponentId: battle.opponentId,
-          amount: battle.amount,
-          footer: 'Challenge declined.',
-        }),
-      ],
+      embeds: [challengeEmbed(battle, { statusText: 'Challenge declined.', status: 'defeat' })],
       components: [],
     });
   }
@@ -514,7 +508,7 @@ async function handleJoin(interaction, battle) {
     return;
   }
 
-  const confirmId = battle.registerAction(`join-confirm-${interaction.user.id}`, async (i, b) => {
+  const confirmId = battle.registerAction({ player: 'p2', action: `join-confirm-${interaction.user.id}` }, async (i, b) => {
     b.clearTimeout(`join-wait-${interaction.user.id}`);
     if (i.user.id !== interaction.user.id) {
       await i.reply({ ephemeral: true, content: 'This confirmation is not for you.' });
@@ -540,21 +534,15 @@ async function handleJoin(interaction, battle) {
     });
 
     if (b.message) {
+      await resolveBattlePlayers(b, interaction.guild);
       await b.message.edit({
-        embeds: [
-          challengeEmbed({
-            challengerId: b.challengerId,
-            opponentId: b.opponentId,
-            amount: b.amount,
-            footer: 'Opponent joined! Choose a game to begin.',
-          }),
-        ],
+        embeds: [challengeEmbed(b, { statusText: 'Opponent joined! Choose a game to begin.' })],
         components: gameSelectRow(b),
       });
     }
   });
 
-  const cancelId = battle.registerAction(`join-cancel-${interaction.user.id}`, async (i) => {
+  const cancelId = battle.registerAction({ player: 'p2', action: `join-cancel-${interaction.user.id}` }, async (i) => {
     battle.clearTimeout(`join-wait-${interaction.user.id}`);
     if (i.user.id !== interaction.user.id) {
       await i.reply({ ephemeral: true, content: 'This action is not for you.' });
@@ -575,7 +563,7 @@ async function handleJoin(interaction, battle) {
         .setColor(0x5865f2)
         .setDescription(
           [
-            `Confirm you want to face <@${battle.challengerId}> for ${formatVP(battle.amount)}.`,
+            `Confirm you want to face <@${battle.challengerId}> for ${battle.amount} points.`,
             'You have 20 seconds to decide.',
           ].join('\n')
         ),
@@ -700,13 +688,13 @@ export async function handleBattleSelect(interaction) {
     opponentId: battle.opponentId,
     amount: battle.amount,
     interaction,
-    makeId: (suffix) => battle.makeId(suffix),
+    makeId: (details) => battle.makeId(details ?? { player: 'sys', action: 'noop' }),
     render: async (payload = {}) => {
       if (battle.message) {
         battle.message = await battle.message.edit(payload);
       }
     },
-    registerAction: (suffix, handler) => battle.registerAction(suffix, handler),
+    registerAction: (details, handler) => battle.registerAction(details, handler),
     clearActions: () => battle.clearActions(),
     setTimeout: (key, ms, handler) => battle.setTimeout(key, ms, handler),
     clearTimeout: (key) => battle.clearTimeout(key),

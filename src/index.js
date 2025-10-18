@@ -6,6 +6,7 @@ import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
 import { handleBattleComponent, handleBattleSelect, isBattleInteraction } from './commands/battle.js';
 import { handleBlackjackInteraction } from './commands/blackjack.js';
+import { handleRouletteButton } from './commands/roulette.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
 import { logger } from './logger.js';
@@ -197,6 +198,13 @@ client.on('interactionCreate', async (interaction) => {
       if (customId.startsWith('bj_')) {
         await handleBlackjackInteraction(interaction);
         return;
+      }
+
+      if (customId.startsWith('roulette:')) {
+        const handled = await handleRouletteButton(interaction);
+        if (handled) {
+          return;
+        }
       }
     }
 
