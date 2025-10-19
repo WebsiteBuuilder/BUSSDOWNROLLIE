@@ -69,7 +69,6 @@ async function main() {
     transfer_fee_percent: '5',
     battle_rake_percent: '2',
     bj_min: '1',
-    bj_max: '50',
     daily_amount: '1'
   };
 

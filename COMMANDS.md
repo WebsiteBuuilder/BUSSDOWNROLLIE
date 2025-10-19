@@ -151,7 +151,6 @@ Update a configuration setting.
 - `transfer_fee_percent` - Transfer fee percentage (default: 5)
 - `battle_rake_percent` - House cut from battles (default: 2)
 - `bj_min` - Minimum blackjack bet (default: 1)
-- `bj_max` - Maximum blackjack bet (default: 50)
 - `five_cost` - VP cost for $5 order (default: 25)
 - `free_cost` - VP cost for free order (default: 60)
 - `daily_amount` - VP amount for daily claim (default: 1)
@@ -162,7 +161,6 @@ Update a configuration setting.
 /admin config daily_rng_chance
 /admin config daily_rng_chance 0.50
 /admin config five_cost 20
-/admin config bj_max 100
 ```
 
 ### Data Export

@@ -277,7 +277,6 @@ All economy settings can be adjusted via `/admin config`:
 | `transfer_fee_percent` | 5       | Transfer fee percentage        |
 | `battle_rake_percent`  | 2       | House cut from battles         |
 | `bj_min`               | 1       | Minimum blackjack bet          |
-| `bj_max`               | 50      | Maximum blackjack bet          |
 | `five_cost`            | 25      | VP cost for $5 order           |
 | `free_cost`            | 60      | VP cost for free order         |
 | `daily_amount`         | 1       | VP amount for daily claim      |

@@ -104,7 +104,6 @@ export const data = new SlashCommandBuilder()
             { name: 'Transfer Fee %', value: 'transfer_fee_percent' },
             { name: 'Battle Rake %', value: 'battle_rake_percent' },
             { name: 'Blackjack Min', value: 'bj_min' },
-            { name: 'Blackjack Max', value: 'bj_max' },
             { name: '$5 Order Cost', value: 'five_cost' },
             { name: 'Free Order Cost', value: 'free_cost' },
             { name: 'Daily Amount', value: 'daily_amount' }
