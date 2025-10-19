@@ -12,7 +12,6 @@ import { logTransaction } from '../lib/logger.js';
 import { ensureCasinoButtonContext, ensureCasinoChannel } from '../lib/casino-guard.js';
 import { logBlackjackEvent } from '../lib/blackjack-telemetry.js';
 import { formatVP } from '../lib/utils.js';
-import { recordBlackjackResult, getTopWinner24h } from '../lib/blackjack-results.js';
 import {
   createBlackjackGame,
   hit,
@@ -655,47 +654,8 @@ async function resolveGame(interaction, round, gameState, user, options = {}) {
     )
     .setTimestamp();
 
-  let trackerEmbed = null;
-
-  if (interaction.guildId && userDiscordId) {
-    const netDelta = payout - gameState.bet;
-
-    try {
-      recordBlackjackResult({
-        guildId: interaction.guildId,
-        userId: userDiscordId,
-        delta: netDelta,
-      });
-    } catch (error) {
-      console.error('Failed to record blackjack result:', error);
-    }
-
-    try {
-      const topWinner = getTopWinner24h(interaction.guildId);
-
-      if (topWinner) {
-        const formattedNet = formatVP(topWinner.net);
-        trackerEmbed = new EmbedBuilder()
-          .setColor(0x5865f2)
-          .setTitle('🏆 24h Blackjack Leader')
-          .setDescription(`Top Winner (24h): <@${topWinner.userId}> with +${formattedNet}`)
-          .setTimestamp();
-      } else {
-        trackerEmbed = new EmbedBuilder()
-          .setColor(0x5865f2)
-          .setTitle('🏆 24h Blackjack Leader')
-          .setDescription('No winners in the last 24h yet.')
-          .setTimestamp();
-      }
-    } catch (error) {
-      console.error('Failed to load 24h blackjack leader:', error);
-    }
-  }
-
-  const embeds = trackerEmbed ? [embed, trackerEmbed] : [embed];
-
   await updateInteractionMessage(interaction, {
-    embeds,
+    embeds: [embed],
     components: [],
   });
 

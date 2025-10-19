@@ -6,14 +6,6 @@ vi.mock('../src/lib/logger.js', () => ({
   initLogger: vi.fn(),
 }));
 
-const mockRecordResult = vi.fn();
-const mockGetTopWinner = vi.fn().mockReturnValue(null);
-
-vi.mock('../src/lib/blackjack-results.js', () => ({
-  recordBlackjackResult: mockRecordResult,
-  getTopWinner24h: mockGetTopWinner,
-}));
-
 const mockPrisma = {
   $transaction: vi.fn(async (callback) => {
     return callback({
