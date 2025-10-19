@@ -191,7 +191,6 @@ All configurable via `/admin config`:
 | transfer_fee_percent | 5 | 5% fee on transfers |
 | battle_rake_percent | 2 | 2% house cut from battles |
 | bj_min | 1 | Minimum blackjack bet |
-| bj_max | 50 | Maximum blackjack bet |
 | five_cost | 25 | Cost for $5 order |
 | free_cost | 60 | Cost for free order |
 | daily_amount | 1 | VP awarded on successful daily |

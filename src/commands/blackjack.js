@@ -12,6 +12,7 @@ import { logTransaction } from '../lib/logger.js';
 import { ensureCasinoButtonContext, ensureCasinoChannel } from '../lib/casino-guard.js';
 import { logBlackjackEvent } from '../lib/blackjack-telemetry.js';
 import { formatVP } from '../lib/utils.js';
+import { recordBlackjackResult, getTopWinner24h } from '../lib/blackjack-results.js';
 import {
   createBlackjackGame,
   hit,
@@ -143,13 +144,11 @@ export async function execute(interaction, _client) {
     }
 
     const minStr = await getConfig('bj_min', '1');
-    const maxStr = await getConfig('bj_max', '50');
     const min = parseInt(minStr, 10);
-    const max = parseInt(maxStr, 10);
 
-    if (bet < min || bet > max) {
+    if (bet < min) {
       return interaction.editReply({
-        content: `❌ Bet must be between ${formatVP(min)} and ${formatVP(max)}.`,
+        content: `❌ Bet must be at least ${formatVP(min)}.`,
       });
     }
 
@@ -354,7 +353,6 @@ async function cancelBlackjack(interaction) {
 
 async function showRules(interaction) {
   const minStr = await getConfig('bj_min', '1');
-  const maxStr = await getConfig('bj_max', '50');
 
   const embed = new EmbedBuilder()
     .setColor(0x000000)
@@ -363,7 +361,7 @@ async function showRules(interaction) {
     .addFields(
       {
         name: '📊 Table Limits',
-        value: `Min: ${formatVP(minStr)}\nMax: ${formatVP(maxStr)}`,
+        value: `Min: ${formatVP(minStr)}\nMax: No Limit`,
         inline: true,
       },
       { name: '💰 Payouts', value: 'Blackjack: 3:2\nWin: 1:1\nPush: Bet Returned', inline: true },
@@ -657,8 +655,47 @@ async function resolveGame(interaction, round, gameState, user, options = {}) {
     )
     .setTimestamp();
 
+  let trackerEmbed = null;
+
+  if (interaction.guildId && userDiscordId) {
+    const netDelta = payout - gameState.bet;
+
+    try {
+      recordBlackjackResult({
+        guildId: interaction.guildId,
+        userId: userDiscordId,
+        delta: netDelta,
+      });
+    } catch (error) {
+      console.error('Failed to record blackjack result:', error);
+    }
+
+    try {
+      const topWinner = getTopWinner24h(interaction.guildId);
+
+      if (topWinner) {
+        const formattedNet = formatVP(topWinner.net);
+        trackerEmbed = new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle('🏆 24h Blackjack Leader')
+          .setDescription(`Top Winner (24h): <@${topWinner.userId}> with +${formattedNet}`)
+          .setTimestamp();
+      } else {
+        trackerEmbed = new EmbedBuilder()
+          .setColor(0x5865f2)
+          .setTitle('🏆 24h Blackjack Leader')
+          .setDescription('No winners in the last 24h yet.')
+          .setTimestamp();
+      }
+    } catch (error) {
+      console.error('Failed to load 24h blackjack leader:', error);
+    }
+  }
+
+  const embeds = trackerEmbed ? [embed, trackerEmbed] : [embed];
+
   await updateInteractionMessage(interaction, {
-    embeds: [embed],
+    embeds,
     components: [],
   });
 
