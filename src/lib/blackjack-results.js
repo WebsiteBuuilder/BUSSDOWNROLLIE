@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,47 +8,40 @@ const __dirname = dirname(__filename);
 const dbDirectory = join(__dirname, '../../data');
 fs.mkdirSync(dbDirectory, { recursive: true });
 
-const databasePath = join(dbDirectory, 'blackjack-results.sqlite');
+const databasePath = join(dbDirectory, 'blackjack-results.json');
 
-const db = new Database(databasePath);
+function readStore() {
+  try {
+    const raw = fs.readFileSync(databasePath, 'utf8');
+    const parsed = JSON.parse(raw);
 
-db.pragma('journal_mode = WAL');
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      Array.isArray(parsed.results) &&
+      Number.isSafeInteger(parsed.nextId)
+    ) {
+      return { results: parsed.results, nextId: parsed.nextId };
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('Failed to read blackjack results store:', error);
+    }
+  }
 
-db.prepare(
-  `CREATE TABLE IF NOT EXISTS blackjack_results (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    guildId TEXT NOT NULL,
-    userId TEXT NOT NULL,
-    delta INTEGER NOT NULL,
-    createdAt INTEGER NOT NULL
-  )`
-).run();
+  return { results: [], nextId: 1 };
+}
 
-db.prepare(
-  `CREATE INDEX IF NOT EXISTS idx_results_guild_time
-   ON blackjack_results(guildId, createdAt)`
-).run();
+function writeStore({ results, nextId }) {
+  const payload = JSON.stringify({ results, nextId }, null, 2);
+  fs.writeFileSync(databasePath, payload);
+}
 
-db.prepare(
-  `CREATE INDEX IF NOT EXISTS idx_results_guild_user_time
-   ON blackjack_results(guildId, userId, createdAt)`
-).run();
+const store = readStore();
 
-const insertResultStatement = db.prepare(
-  `INSERT INTO blackjack_results (guildId, userId, delta, createdAt)
-   VALUES (@guildId, @userId, @delta, @createdAt)`
-);
-
-const topWinnerStatement = db.prepare(
-  `SELECT userId, SUM(delta) AS net
-   FROM blackjack_results
-   WHERE guildId = @guildId
-     AND createdAt >= @sinceMs
-   GROUP BY userId
-   HAVING net > 0
-   ORDER BY net DESC
-   LIMIT 1`
-);
+function persist() {
+  writeStore(store);
+}
 
 export function recordBlackjackResult({ guildId, userId, delta }) {
   if (!guildId || !userId || typeof delta !== 'number' || Number.isNaN(delta)) {
@@ -59,7 +51,19 @@ export function recordBlackjackResult({ guildId, userId, delta }) {
   const createdAt = Date.now();
   const normalizedDelta = Math.trunc(delta);
 
-  insertResultStatement.run({ guildId, userId, delta: normalizedDelta, createdAt });
+  store.results.push({
+    id: store.nextId++,
+    guildId,
+    userId,
+    delta: normalizedDelta,
+    createdAt,
+  });
+
+  try {
+    persist();
+  } catch (error) {
+    console.error('Failed to persist blackjack result:', error);
+  }
 }
 
 export function getTopWinner24h(guildId) {
@@ -68,11 +72,31 @@ export function getTopWinner24h(guildId) {
   }
 
   const sinceMs = Date.now() - 24 * 60 * 60 * 1000;
-  const row = topWinnerStatement.get({ guildId, sinceMs });
 
-  if (!row) {
+  const aggregates = new Map();
+
+  for (const result of store.results) {
+    if (result.guildId !== guildId || result.createdAt < sinceMs) {
+      continue;
+    }
+
+    const current = aggregates.get(result.userId) ?? 0;
+    aggregates.set(result.userId, current + result.delta);
+  }
+
+  let topUserId = null;
+  let topNet = 0;
+
+  for (const [userId, net] of aggregates.entries()) {
+    if (net > 0 && (topUserId === null || net > topNet)) {
+      topUserId = userId;
+      topNet = net;
+    }
+  }
+
+  if (topUserId === null) {
     return null;
   }
 
-  return { userId: row.userId, net: Number(row.net) };
+  return { userId: topUserId, net: topNet };
 }
