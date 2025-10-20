@@ -1,9 +1,10 @@
-import crypto from 'crypto';
 import { MessageFlags } from 'discord.js';
 import { getOrCreateUser, removeVP, addVP } from '../db/index.js';
 import { buildPromptEmbed, buildColorButtons, buildSpinEmbed, buildResultEmbed } from './ui.js';
 import { animateRoulette } from './animation.js';
 import { safeReply } from '../utils/interaction.js';
+import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
+import { houseEdgeConfig } from '../config/casino.js';
 
 const ACTIVE_ROULETTE = new Map();
 
@@ -11,6 +12,7 @@ const WIN_FRAMES = {
   red: '🟩🟥⬛🟥⬛🟥⬛🟥⬛🟥🟩⬛🟥⬛',
   black: '🟩⬛🟥⬛🟥⬛🟥⬛🟥⬛🟩🟥⬛🟥',
   green: '🟥⬛🟥⬛🟥⬛🟥⬛🟥⬛🟥⬛🟩🟥',
+  straight: '🟩🎯⬛🎯⬛🎯⬛🎯⬛🎯🟩⬛🎯⬛',
 };
 
 const PAYOUTS = {
@@ -18,15 +20,6 @@ const PAYOUTS = {
   black: 2,
   green: 15,
 };
-
-function pickWinningColor() {
-  const wheel = [
-    ...Array(18).fill('red'),
-    ...Array(18).fill('black'),
-    'green',
-  ];
-  return wheel[crypto.randomInt(wheel.length)];
-}
 
 function formatDisplayName(interaction) {
   return interaction.member?.displayName ?? interaction.user.username;
@@ -68,6 +61,7 @@ export async function startRoulette(interaction, amount) {
     messageId: message.id,
     channelId: message.channelId,
     displayName,
+    vipScore: user.streakDays ?? 0,
   });
 }
 
@@ -117,35 +111,37 @@ export async function handleRouletteButton(interaction) {
     });
   };
 
-  const winningColor = pickWinningColor();
-  await animateRoulette(updateFrame, WIN_FRAMES[winningColor]);
+  const pocket = getRoulettePocket({
+    userId: state.userId,
+    betAmount: state.amount,
+    betDescriptor: { color },
+    userProfile: { vipPoints: state.vipScore ?? 0 },
+  });
 
-  let payout = 0;
-  let didWin = false;
+  const frameKey = pocket.color in WIN_FRAMES ? pocket.color : 'straight';
+  await animateRoulette(updateFrame, WIN_FRAMES[frameKey]);
 
-  if (winningColor === color) {
-    const multiplier = PAYOUTS[color] ?? 2;
-    payout = state.amount * multiplier;
-    didWin = true;
+  const didWin = pocket.color === color;
+  const multiplier = PAYOUTS[color] ?? 2;
+  const payout = didWin ? state.amount * multiplier : 0;
+
+  if (didWin) {
     await addVP(state.userId, payout);
   }
 
-  const netGain = didWin ? payout - state.amount : 0;
+  recordRouletteOutcome(state.userId, didWin);
 
   const resultEmbed = buildResultEmbed({
     displayName: state.displayName,
     amount: state.amount,
-    winningColor,
-    frame: WIN_FRAMES[winningColor],
+    winningColor: pocket.color,
+    winningNumber: pocket.number,
+    frame: WIN_FRAMES[frameKey],
     didWin,
-    net: netGain,
+    net: didWin ? payout - state.amount : 0,
     chosenColor: color,
+    houseEdge: houseEdgeConfig.roulette.baseEdge,
   });
-
-  if (!didWin) {
-    await interaction.editReply({ embeds: [resultEmbed], components: [] });
-    return true;
-  }
 
   await interaction.editReply({ embeds: [resultEmbed], components: [] });
   return true;

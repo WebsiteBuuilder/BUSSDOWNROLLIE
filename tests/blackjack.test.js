@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   createDeck,
+  createShoe,
   calculateHandValue,
   formatCard,
   formatHand,
@@ -10,6 +11,7 @@ import {
   shouldDealerHit,
   createBlackjackGame,
 } from '../src/lib/blackjack.js';
+import { houseEdgeConfig } from '../src/config/casino.js';
 
 describe('Blackjack Engine', () => {
   describe('createDeck', () => {
@@ -208,12 +210,12 @@ describe('Blackjack Engine', () => {
       expect(shouldDealerHit(hand)).toBe(false);
     });
 
-    it('should hit on soft 17', () => {
+    it('should stand on soft 17 when configured', () => {
       const hand = [
         { rank: 'A', suit: '♠️' },
         { rank: '6', suit: '♥️' },
       ];
-      expect(shouldDealerHit(hand)).toBe(true);
+      expect(shouldDealerHit(hand)).toBe(false);
     });
   });
 
@@ -227,13 +229,23 @@ describe('Blackjack Engine', () => {
       expect(game.bet).toBe(10);
       expect(game.doubled).toBe(false);
       expect(game.playerStand).toBe(false);
+      expect(game.turns).toBe(0);
+      expect(typeof game.cachedPlayerValue).toBe('number');
     });
 
     it('should draw from deck', () => {
       const game = createBlackjackGame(10);
       const initialDeckSize = game.deck.length;
 
-      expect(initialDeckSize).toBe(48); // 52 - 4 cards dealt
+      const expected = houseEdgeConfig.blackjack.deckCount * 52 - 4;
+      expect(initialDeckSize).toBe(expected);
+    });
+  });
+
+  describe('createShoe', () => {
+    it('should respect deck count', () => {
+      const shoe = createShoe(2);
+      expect(shoe).toHaveLength(104);
     });
   });
 });
