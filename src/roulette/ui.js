@@ -49,7 +49,17 @@ export function buildSpinEmbed({ displayName, amount, frame, caption }) {
     .setFooter({ text: `💰 Total Wager: ${amount} points` });
 }
 
-export function buildResultEmbed({ displayName, amount, winningColor, frame, didWin, net, chosenColor }) {
+export function buildResultEmbed({
+  displayName,
+  amount,
+  winningColor,
+  winningNumber,
+  frame,
+  didWin,
+  net,
+  chosenColor,
+  houseEdge,
+}) {
   const info = COLOR_INFO[winningColor];
   const chosenInfo = COLOR_INFO[chosenColor];
   const colorValue = didWin ? 0x57f287 : 0xed4245;
@@ -58,6 +68,7 @@ export function buildResultEmbed({ displayName, amount, winningColor, frame, did
     '🎉 The wheel stops!',
     frame,
     '',
+    `🎯 Landing Pocket: **${winningNumber ?? '?'}**`,
     `🪙 Winning Color: ${info.emoji} **${info.name}**`,
     `🎯 Your Pick: ${chosenInfo.emoji} **${chosenInfo.name}**`,
   ];
@@ -66,6 +77,10 @@ export function buildResultEmbed({ displayName, amount, winningColor, frame, did
     lines.push(`🏆 Winner: ${displayName} (+${net} points)`);
   } else {
     lines.push(`💀 Loss: ${displayName} (-${amount} points)`);
+  }
+
+  if (houseEdge) {
+    lines.push('', `📊 House Edge Model: ${(houseEdge * 100).toFixed(2)}% baseline`);
   }
 
   return new EmbedBuilder()

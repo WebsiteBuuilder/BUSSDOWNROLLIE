@@ -24,6 +24,7 @@ import {
   canSplit,
   determineResult,
 } from '../lib/blackjack.js';
+import { canDoubleDown } from '../lib/house-edge.js';
 
 function ephemeral(options = {}) {
   const { flags, ...rest } = options ?? {};
@@ -544,6 +545,14 @@ export async function handleBlackjackInteraction(interaction) {
         break;
 
       case 'double':
+        if (!canDoubleDown(gameState)) {
+          return interaction.followUp(
+            ephemeral({
+              content: '❌ Double down is only available on your first move with totals of 9, 10, or 11.',
+            })
+          );
+        }
+
         // Check balance
         if (round.user.vp < gameState.bet) {
           return interaction.followUp(
@@ -553,7 +562,18 @@ export async function handleBlackjackInteraction(interaction) {
           );
         }
 
-        gameState = doubleDown(gameState);
+        try {
+          gameState = doubleDown(gameState);
+        } catch (error) {
+          if (error.message === 'DOUBLE_DOWN_UNAVAILABLE') {
+            return interaction.followUp(
+              ephemeral({
+                content: '❌ Double down is only allowed before you hit and with totals of 9, 10, or 11.',
+              })
+            );
+          }
+          throw error;
+        }
 
         // Deduct additional bet
         await prisma.user.update({
