@@ -1,3 +1,4 @@
+import 'ts-node/register/esm';
 import { Client, Collection, Events, GatewayIntentBits, MessageFlags, REST, Routes } from 'discord.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -10,6 +11,11 @@ import { handleRouletteButton } from './commands/roulette.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
 import { logger } from './logger.js';
+import {
+  handleGiveawayButton,
+  initGiveaways,
+  isGiveawayButton,
+} from './features/giveaways/router.ts';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);
@@ -33,7 +39,7 @@ client.commands = new Collection();
  */
 async function loadCommands() {
   const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
+  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js') || file.endsWith('.ts'));
 
   for (const file of commandFiles) {
     const filePath = join(commandsPath, file);
@@ -129,6 +135,9 @@ client.once(Events.ClientReady, async () => {
   // Register commands
   await registerCommands();
 
+  // Initialize giveaway system
+  initGiveaways(client);
+
   // Initialize logger
   if (process.env.LOG_CHANNEL_ID) {
     try {
@@ -189,6 +198,11 @@ client.on('interactionCreate', async (interaction) => {
       }
 
       const customId = interaction.customId ?? '';
+
+      if (isGiveawayButton(customId)) {
+        await handleGiveawayButton(interaction);
+        return;
+      }
 
       if (customId.startsWith('approvevouch:')) {
         await handleApproveVouchButton(interaction);
