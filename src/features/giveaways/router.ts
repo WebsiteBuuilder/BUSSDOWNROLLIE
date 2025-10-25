@@ -1,8 +1,8 @@
 import { ButtonInteraction, Client } from 'discord.js';
-import { GiveawayAuditService } from './audit.ts';
-import { GiveawayLockManager } from './locks.ts';
-import { GiveawayService } from './service.ts';
-import { GiveawayScheduler } from './scheduler.ts';
+import { GiveawayAuditService } from './audit.js';
+import { GiveawayLockManager } from './locks.js';
+import { GiveawayService } from './service.js';
+import { GiveawayScheduler } from './scheduler.js';
 import { logger } from '../../logger.js';
 
 interface GiveawayContext {

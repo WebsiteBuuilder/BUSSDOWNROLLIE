@@ -9,7 +9,7 @@ import {
   GiveawayPotSnapshot,
   GiveawayRecord,
   GiveawayState,
-} from './model.ts';
+} from './model.js';
 
 const DATA_DIR = join(process.cwd(), 'data');
 const DB_PATH = join(DATA_DIR, 'giveaways.sqlite');
@@ -130,7 +130,6 @@ const insertGiveawayStmt = db.prepare<[
 );
 
 const updateGiveawayStmt = db.prepare<[
-  string,
   string | null,
   number | null,
   number | null,

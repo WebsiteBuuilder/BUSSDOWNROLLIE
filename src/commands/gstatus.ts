@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
-import { getGiveawayService } from '../features/giveaways/router.ts';
-import { buildStatusEmbed } from '../features/giveaways/ui.ts';
+import { getGiveawayService } from '../features/giveaways/router.js';
+import { buildStatusEmbed } from '../features/giveaways/ui.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gstatus')

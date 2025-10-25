@@ -1,5 +1,5 @@
-import { GiveawayRecord } from './model.ts';
-import { GiveawayService } from './service.ts';
+import { GiveawayRecord } from './model.js';
+import { GiveawayService } from './service.js';
 import { logger } from '../../logger.js';
 
 export class GiveawayScheduler {

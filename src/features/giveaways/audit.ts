@@ -1,5 +1,5 @@
 import { Client, TextBasedChannel } from 'discord.js';
-import { logAudit } from './db.ts';
+import { logAudit } from './db.js';
 import { logger } from '../../logger.js';
 
 interface AuditMeta {

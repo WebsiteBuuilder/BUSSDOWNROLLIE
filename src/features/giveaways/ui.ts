@@ -6,7 +6,7 @@ import {
   InteractionReplyOptions,
   InteractionUpdateOptions,
 } from 'discord.js';
-import { GiveawayPotSnapshot, GiveawayRecord } from './model.ts';
+import { GiveawayPotSnapshot, GiveawayRecord } from './model.js';
 
 function formatTime(timestamp: number): string {
   return `<t:${Math.floor(timestamp / 1000)}:R>`;
