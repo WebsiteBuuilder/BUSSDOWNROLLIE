@@ -1,4 +1,4 @@
-import { hasImageAttachment, getFirstImageUrl, mentionsRole } from '../lib/utils.js';
+import { hasImageAttachment, getFirstImageUrl, getProviderRoleIds, formatVP } from '../lib/utils.js';
 import prisma, { getOrCreateUser } from '../db/index.js';
 import { logTransaction } from '../lib/logger.js';
 
@@ -9,8 +9,13 @@ export async function execute(message) {
   // Ignore bots
   if (message.author.bot) return;
 
-  // Check if message is in vouch channel
-  if (message.channel.id !== process.env.VOUCH_CHANNEL_ID) return;
+  // Check if message is in the configured vouch channel (fallback to channel name)
+  const vouchChannelId = process.env.VOUCH_CHANNEL_ID;
+  const isVouchChannel = vouchChannelId
+    ? message.channel.id === vouchChannelId
+    : message.channel.name?.toLowerCase().includes('vouch');
+
+  if (!isVouchChannel) return;
 
   // Validate message has image attachment
   if (!hasImageAttachment(message)) {
@@ -25,73 +30,103 @@ export async function execute(message) {
     if (user.blacklisted) {
       await message.reply({
         content: '❌ You are blacklisted and cannot earn VP.',
-        ephemeral: true
       });
       return;
     }
 
     // Check for duplicate vouch
     const existingVouch = await prisma.vouch.findUnique({
-      where: { messageId: message.id }
+      where: { messageId: message.id },
     });
 
     if (existingVouch) {
       return; // Silently ignore duplicate
     }
 
-    // Check if provider was mentioned
-    const providerMentioned = mentionsRole(message, process.env.PROVIDER_ROLE_ID);
+    const providerRoleIds = getProviderRoleIds();
+
+    const mentions = message.mentions ?? {};
+
+    const hasAnyMention =
+      (mentions.users?.size ?? 0) > 0 ||
+      (mentions.roles?.size ?? 0) > 0 ||
+      Boolean(mentions.everyone);
+
+    let providerRoleMentioned = false;
+    if (providerRoleIds.length > 0) {
+      const memberHasRole =
+        typeof mentions.members?.some === 'function'
+          ? mentions.members.some((member) =>
+              providerRoleIds.some((roleId) => member?.roles?.cache?.has?.(roleId))
+            )
+          : false;
+      const roleCollectionHasRole =
+        typeof mentions.roles?.has === 'function'
+          ? providerRoleIds.some((roleId) => mentions.roles.has(roleId))
+          : false;
+
+      providerRoleMentioned = memberHasRole || roleCollectionHasRole;
+    }
+
+    const providerMentioned = hasAnyMention || providerRoleMentioned;
     const imageUrl = getFirstImageUrl(message);
 
     if (providerMentioned) {
       // Auto-approve and credit VP
-      await prisma.$transaction(async (tx) => {
-        // Update user VP
-        await tx.user.update({
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const incrementedUser = await tx.user.update({
           where: { id: user.id },
-          data: { vp: { increment: 1 } }
+          data: { vp: { increment: 1 } },
         });
 
-        // Create vouch record
         await tx.vouch.create({
           data: {
             messageId: message.id,
             userId: user.id,
             imageUrl,
             providerMentioned: true,
-            status: 'auto'
-          }
+            status: 'auto',
+            channelId: message.channel.id,
+            guildId: message.guildId,
+          },
         });
-      });
 
-      // DM user confirmation
-      try {
-        await message.author.send({
-          embeds: [{
-            color: 0x00FF00,
-            title: '✅ Vouch Approved!',
-            description: 'Thanks for the vouch! +1 VP',
-            fields: [
-              { name: 'New Balance', value: `${user.vp + 1} VP 💰`, inline: true }
-            ],
-            timestamp: new Date().toISOString()
-          }]
-        });
-      } catch (error) {
-        console.log('Could not DM user:', error.message);
-      }
+        return incrementedUser;
+      });
 
       // Send confirmation in channel
       await message.react('✅');
+
+      const acknowledgementLines = [
+        `✅ Vouch verified! Added +1 point to <@${message.author.id}>'s balance.`,
+      ];
+
+      if (typeof updatedUser?.vp === 'number') {
+        acknowledgementLines.push(`Current balance: ${formatVP(updatedUser.vp)}.`);
+      }
+
+      const sendAcknowledgement = message.channel?.send;
+
+      if (typeof sendAcknowledgement === 'function') {
+        try {
+          await sendAcknowledgement.call(message.channel, {
+            content: acknowledgementLines.join('\n'),
+            allowedMentions: { users: [message.author.id] },
+          });
+        } catch (sendError) {
+          console.warn('Failed to send vouch acknowledgement message', sendError);
+        }
+      } else {
+        console.warn('Failed to send vouch acknowledgement message: channel.send is not available');
+      }
 
       // Log transaction
       await logTransaction('vouch', {
         userId: message.author.id,
         amount: 1,
         status: 'auto',
-        messageLink: message.url
+        messageLink: message.url,
       });
-
     } else {
       // Create pending vouch
       await prisma.vouch.create({
@@ -100,22 +135,30 @@ export async function execute(message) {
           userId: user.id,
           imageUrl,
           providerMentioned: false,
-          status: 'pending'
-        }
+          status: 'pending',
+          channelId: message.channel.id,
+          guildId: message.guildId,
+        },
       });
+
+      try {
+        await message.react('⏳');
+      } catch (error) {
+        console.log('Could not react to pending vouch:', error.message);
+      }
 
       // Reply with instruction
       await message.reply({
-        content: '⏳ Please @ a provider to validate your vouch, or wait for manual approval with `/approvevouch`.',
-        allowedMentions: { repliedUser: true }
+        content:
+          '⏳ Please @ a provider you ordered from, or wait for manual approval with `/approvevouch`.',
+        allowedMentions: { repliedUser: true },
       });
     }
   } catch (error) {
     console.error('Error processing vouch:', error);
     await message.reply({
       content: '❌ An error occurred processing your vouch. Please try again later.',
-      allowedMentions: { repliedUser: true }
+      allowedMentions: { repliedUser: true },
     });
   }
 }
-

@@ -24,6 +24,17 @@ Claim random daily VP with 35% success rate (24-hour cooldown).
 ```
 View top VP holders. Shows 10 users per page with medals for top 3.
 
+### Giveaways
+```
+/gbuyin [giveaway_id]
+```
+Buy into the active giveaway in the channel (or provide an ID). Each buy-in deducts the configured VP cost and grants one ticket.
+
+```
+/gstatus [giveaway_id]
+```
+View live giveaway stats, including pot size, entrants, reveal window, and time remaining.
+
 ### Battle Games
 ```
 /battle @user <amount> [game]
@@ -73,17 +84,11 @@ Creates a private ticket with providers.
 
 ### Vouch Management
 ```
-/approvevouch <message_link>
+/approvevouch
 ```
-Manually approve a pending vouch. Credits +1 VP to the user.
+Open an interactive list of pending vouches. Click the button next to a vouch to approve it and credit +1 VP to the user.
 
-**How to get message link:**
-Right-click message → Copy Message Link
-
-**Example:**
-```
-/approvevouch https://discord.com/channels/123/456/789
-```
+> 💡 Users who include an `@` mention in their vouch post are approved automatically. Only vouches without a mention require manual approval.
 
 ### Redemption Management
 ```
@@ -101,6 +106,33 @@ Mark a redemption as fulfilled/complete.
 ## 🛡️ Admin Commands
 
 All admin commands are under the `/admin` parent command.
+
+### Giveaways
+```
+/gstart title:<text> duration:<time> buyin_cost:<vp> [max_entries_per_user] [reveal_window_seconds] [payout_ratio_percent] [description]
+```
+Start a VP buy-in giveaway in the current channel. Requires `MANAGE_GUILD`.
+
+```
+/gend [giveaway_id]
+```
+Force the giveaway into its reveal window immediately (defaults to 30 seconds). Requires host or `MANAGE_GUILD`.
+
+```
+/gcancel [giveaway_id]
+```
+Cancel an active giveaway and automatically refund all entrants. Requires host or `MANAGE_GUILD`.
+
+```
+/gconfig [defaults]
+```
+Set bot-wide defaults for buy-in cost, reveal window, payout ratio, and max entries per user.
+
+```
+/gdev fast_end <giveaway_id> <seconds>
+/gdev mock_entries <giveaway_id> <count>
+```
+QA utilities to shorten timers or populate mock entries (requires `MANAGE_GUILD`).
 
 ### VP Management
 ```
@@ -157,7 +189,6 @@ Update a configuration setting.
 - `transfer_fee_percent` - Transfer fee percentage (default: 5)
 - `battle_rake_percent` - House cut from battles (default: 2)
 - `bj_min` - Minimum blackjack bet (default: 1)
-- `bj_max` - Maximum blackjack bet (default: 50)
 - `five_cost` - VP cost for $5 order (default: 25)
 - `free_cost` - VP cost for free order (default: 60)
 - `daily_amount` - VP amount for daily claim (default: 1)
@@ -168,7 +199,6 @@ Update a configuration setting.
 /admin config daily_rng_chance
 /admin config daily_rng_chance 0.50
 /admin config five_cost 20
-/admin config bj_max 100
 ```
 
 ### Data Export

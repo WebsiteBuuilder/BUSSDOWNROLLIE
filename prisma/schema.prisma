@@ -17,6 +17,7 @@ model User {
   lastDailyAt           DateTime?
   streakDays            Int              @default(0)
   blacklisted           Boolean          @default(false)
+  dailyChanceModifier   Float            @default(0)
   createdAt             DateTime         @default(now())
   
   // Relations
@@ -35,6 +36,8 @@ model Vouch {
   userId                Int
   user                  User     @relation(fields: [userId], references: [id])
   imageUrl              String
+  channelId             String?
+  guildId               String?
   createdAt             DateTime @default(now())
   providerMentioned     Boolean
   status                String   // 'auto', 'approved', 'rejected', 'pending'

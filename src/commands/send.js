@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getOrCreateUser, transferVP, getConfig } from '../db/index.js';
 import { calculateTransferFee, formatVP } from '../lib/utils.js';
 import { logTransaction } from '../lib/logger.js';
@@ -6,18 +6,11 @@ import { logTransaction } from '../lib/logger.js';
 export const data = new SlashCommandBuilder()
   .setName('send')
   .setDescription('Transfer VP to another user')
-  .addUserOption(option =>
-    option
-      .setName('user')
-      .setDescription('User to send VP to')
-      .setRequired(true)
+  .addUserOption((option) =>
+    option.setName('user').setDescription('User to send VP to').setRequired(true)
   )
-  .addIntegerOption(option =>
-    option
-      .setName('amount')
-      .setDescription('Amount of VP to send')
-      .setRequired(true)
-      .setMinValue(1)
+  .addIntegerOption((option) =>
+    option.setName('amount').setDescription('Amount of VP to send').setRequired(true).setMinValue(1)
   );
 
 export async function execute(interaction) {
@@ -29,14 +22,14 @@ export async function execute(interaction) {
   if (recipient.bot) {
     return interaction.reply({
       content: '❌ You cannot send VP to bots.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral,
     });
   }
 
   if (recipient.id === sender.id) {
     return interaction.reply({
       content: '❌ You cannot send VP to yourself.',
-      ephemeral: true
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -55,14 +48,14 @@ export async function execute(interaction) {
     // Check if sender is blacklisted
     if (senderUser.blacklisted) {
       return interaction.editReply({
-        content: '❌ You are blacklisted and cannot transfer VP.'
+        content: '❌ You are blacklisted and cannot transfer VP.',
       });
     }
 
     // Check balance
     if (senderUser.vp < totalCost) {
       return interaction.editReply({
-        content: `❌ Insufficient balance. You need ${formatVP(totalCost)} (${formatVP(amount)} + ${formatVP(fee)} fee), but you only have ${formatVP(senderUser.vp)}.`
+        content: `❌ Insufficient balance. You need ${formatVP(totalCost)} (${formatVP(amount)} + ${formatVP(fee)} fee), but you only have ${formatVP(senderUser.vp)}.`,
       });
     }
 
@@ -71,7 +64,7 @@ export async function execute(interaction) {
 
     // Create success embed
     const embed = new EmbedBuilder()
-      .setColor(0x00FF00)
+      .setColor(0x00ff00)
       .setTitle('✅ Transfer Complete')
       .addFields(
         { name: 'From', value: `<@${sender.id}>`, inline: true },
@@ -88,15 +81,17 @@ export async function execute(interaction) {
     // DM recipient
     try {
       await recipient.send({
-        embeds: [{
-          color: 0x00FF00,
-          title: '💰 VP Received!',
-          description: `**${sender.username}** sent you ${formatVP(amount)}!`,
-          fields: [
-            { name: 'Your New Balance', value: formatVP(result.updatedTo.vp), inline: true }
-          ],
-          timestamp: new Date().toISOString()
-        }]
+        embeds: [
+          {
+            color: 0x00ff00,
+            title: '💰 VP Received!',
+            description: `**${sender.username}** sent you ${formatVP(amount)}!`,
+            fields: [
+              { name: 'Your New Balance', value: formatVP(result.updatedTo.vp), inline: true },
+            ],
+            timestamp: new Date().toISOString(),
+          },
+        ],
       });
     } catch (error) {
       console.log('Could not DM recipient:', error.message);
@@ -107,14 +102,12 @@ export async function execute(interaction) {
       fromUserId: sender.id,
       toUserId: recipient.id,
       amount,
-      fee
+      fee,
     });
-
   } catch (error) {
     console.error('Error in send command:', error);
     await interaction.editReply({
-      content: `❌ Transfer failed: ${error.message}`
+      content: `❌ Transfer failed: ${error.message}`,
     });
   }
 }
-

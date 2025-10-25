@@ -19,40 +19,88 @@ export function formatTimestamp(date, style = 'F') {
 export function parseMessageLink(link) {
   const match = link.match(/https:\/\/discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
   if (!match) return null;
-  
+
   return {
     guildId: match[1],
     channelId: match[2],
-    messageId: match[3]
+    messageId: match[3],
   };
 }
 
 /**
- * Check if message has image attachments
+ * Build a Discord message link from identifiers
  */
-export function hasImageAttachment(message) {
-  if (!message.attachments || message.attachments.size === 0) {
-    return false;
+export function buildMessageLink(guildId, channelId, messageId) {
+  if (!guildId || !channelId || !messageId) {
+    return null;
   }
 
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-  return message.attachments.some(attachment => {
-    const ext = attachment.name?.toLowerCase().split('.').pop();
-    return imageExtensions.includes(ext) || attachment.contentType?.startsWith('image/');
-  });
+  return `https://discord.com/channels/${guildId}/${channelId}/${messageId}`;
+}
+
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+
+function normalizeAttachments(attachments) {
+  if (!attachments) {
+    return [];
+  }
+
+  if (Array.isArray(attachments)) {
+    return attachments;
+  }
+
+  if (typeof attachments.values === 'function') {
+    return Array.from(attachments.values());
+  }
+
+  return Array.from(attachments);
+}
+
+function isImageAttachment(attachment) {
+  const ext = attachment.name?.toLowerCase().split('.').pop();
+  return IMAGE_EXTENSIONS.includes(ext) || attachment.contentType?.startsWith('image/');
+}
+
+function getEmbedImageUrl(embed) {
+  if (!embed) return null;
+
+  return embed.image?.url || embed.thumbnail?.url || null;
+}
+
+/**
+ * Check if message has image attachments or embeds
+ */
+export function hasImageAttachment(message) {
+  const attachments = normalizeAttachments(message.attachments);
+  if (attachments.some(isImageAttachment)) {
+    return true;
+  }
+
+  if (Array.isArray(message.embeds)) {
+    return message.embeds.some((embed) => Boolean(getEmbedImageUrl(embed)));
+  }
+
+  return false;
 }
 
 /**
  * Get first image URL from message
  */
 export function getFirstImageUrl(message) {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
-  const imageAttachment = message.attachments.find(attachment => {
-    const ext = attachment.name?.toLowerCase().split('.').pop();
-    return imageExtensions.includes(ext) || attachment.contentType?.startsWith('image/');
-  });
-  
-  return imageAttachment?.url || null;
+  const attachments = normalizeAttachments(message.attachments);
+  const imageAttachment = attachments.find(isImageAttachment);
+  if (imageAttachment?.url) {
+    return imageAttachment.url;
+  }
+
+  if (Array.isArray(message.embeds)) {
+    const embedWithImage = message.embeds.find((embed) => Boolean(getEmbedImageUrl(embed)));
+    if (embedWithImage) {
+      return getEmbedImageUrl(embedWithImage);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -62,12 +110,47 @@ export function mentionsRole(message, roleId) {
   return message.mentions.roles.has(roleId);
 }
 
+function parseRoleIds(raw) {
+  if (!raw) {
+    return [];
+  }
+
+  return raw
+    .split(/[\s,]+/)
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+export function getProviderRoleIds() {
+  return parseRoleIds(process.env.PROVIDER_ROLE_ID);
+}
+
+export function memberHasProviderRole(member) {
+  const providerRoleIds = getProviderRoleIds();
+
+  if (providerRoleIds.length > 0) {
+    const hasConfiguredRole = providerRoleIds.some((roleId) => member.roles.cache.has(roleId));
+    if (hasConfiguredRole) {
+      return true;
+    }
+  }
+
+  return member.roles.cache.some((role) => {
+    const name = role.name?.toLowerCase?.();
+    return name?.includes('provider') || name?.includes('staff');
+  });
+}
+
 /**
  * Calculate transfer fee
  */
 export function calculateTransferFee(amount, feePercent) {
+  if (feePercent <= 0) {
+    return 0;
+  }
+
   const fee = Math.floor((amount * feePercent) / 100);
-  return Math.max(fee, 1); // Minimum 1 VP fee
+  return Math.max(fee, 1); // Minimum 1 VP fee when a fee is enabled
 }
 
 /**
@@ -107,7 +190,7 @@ export function randomInt(min, max) {
  * Sleep for ms milliseconds
  */
 export function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -115,11 +198,11 @@ export function sleep(ms) {
  */
 export function exportToCSV(users) {
   let csv = 'Discord ID,VP Balance,Streak Days,Blacklisted,Created At\n';
-  
+
   for (const user of users) {
     csv += `${user.discordId},${user.vp},${user.streakDays},${user.blacklisted},${user.createdAt}\n`;
   }
-  
+
   return csv;
 }
 
@@ -128,10 +211,14 @@ export function exportToCSV(users) {
  */
 export function getMedalEmoji(rank) {
   switch (rank) {
-    case 1: return '🥇';
-    case 2: return '🥈';
-    case 3: return '🥉';
-    default: return '';
+    case 1:
+      return '🥇';
+    case 2:
+      return '🥈';
+    case 3:
+      return '🥉';
+    default:
+      return '';
   }
 }
 
@@ -140,10 +227,10 @@ export function getMedalEmoji(rank) {
  */
 export function createErrorEmbed(message) {
   return {
-    color: 0xFF0000,
+    color: 0xff0000,
     title: '❌ Error',
     description: message,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -152,10 +239,9 @@ export function createErrorEmbed(message) {
  */
 export function createSuccessEmbed(title, description) {
   return {
-    color: 0x00FF00,
+    color: 0x00ff00,
     title: `✅ ${title}`,
     description,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
-

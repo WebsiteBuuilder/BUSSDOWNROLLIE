@@ -6,4 +6,4 @@ npx prisma migrate deploy
 
 # Start the bot
 echo "Starting GUHD EATS bot..."
-node src/index.js
+node dist/src/index.js

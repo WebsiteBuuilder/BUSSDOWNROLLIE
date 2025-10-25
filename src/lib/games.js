@@ -7,7 +7,7 @@ export function createRPSGame() {
   return {
     type: 'rps',
     challengerChoice: null,
-    opponentChoice: null
+    opponentChoice: null,
   };
 }
 
@@ -19,7 +19,7 @@ export function resolveRPS(challengerChoice, opponentChoice) {
   const wins = {
     rock: 'scissors',
     paper: 'rock',
-    scissors: 'paper'
+    scissors: 'paper',
   };
 
   return wins[challengerChoice] === opponentChoice ? 'challenger' : 'opponent';
@@ -44,7 +44,7 @@ export function createHighCardGame() {
   return {
     type: 'highcard',
     challengerCard: shuffled[0],
-    opponentCard: shuffled[1]
+    opponentCard: shuffled[1],
   };
 }
 
@@ -72,7 +72,7 @@ export function createDiceGame() {
     challengerRolls,
     opponentRolls,
     challengerTotal,
-    opponentTotal
+    opponentTotal,
   };
 }
 
@@ -93,7 +93,7 @@ export function createHiLoGame() {
     type: 'hilow',
     number: randomInt(1, 100),
     challengerChoice: null,
-    opponentChoice: null
+    opponentChoice: null,
   };
 }
 
@@ -104,7 +104,7 @@ export function resolveHiLo(game) {
   }
 
   const isHigh = game.number > 50;
-  
+
   // Challenger chose high
   if (game.challengerChoice === 'high') {
     return isHigh ? 'challenger' : 'opponent';
@@ -124,8 +124,8 @@ export function createReactionGame() {
     startTime: null,
     clickedAt: {
       challenger: null,
-      opponent: null
-    }
+      opponent: null,
+    },
   };
 }
 
@@ -152,7 +152,93 @@ export function resolveReaction(game) {
   } else if (opponentTime < challengerTime) {
     return 'opponent';
   }
-  
+
+  return 'tie';
+}
+
+/**
+ * Coin Flip Game
+ */
+export function createCoinFlipGame() {
+  return {
+    type: 'coinflip',
+    flip: Math.random() < 0.5 ? 'heads' : 'tails',
+  };
+}
+
+export function resolveCoinFlip(game) {
+  return game.flip === 'heads' ? 'challenger' : 'opponent';
+}
+
+/**
+ * Odd vs Even Game
+ */
+export function createOddEvenGame() {
+  const number = randomInt(1, 10);
+  return {
+    type: 'oddeven',
+    number,
+  };
+}
+
+export function resolveOddEven(game) {
+  return game.number % 2 === 1 ? 'challenger' : 'opponent';
+}
+
+/**
+ * Archery Shootout Game
+ */
+export function createArcheryGame() {
+  const challengerShots = Array.from({ length: 3 }, () => randomInt(1, 10));
+  const opponentShots = Array.from({ length: 3 }, () => randomInt(1, 10));
+
+  const challengerTotal = challengerShots.reduce((acc, value) => acc + value, 0);
+  const opponentTotal = opponentShots.reduce((acc, value) => acc + value, 0);
+
+  return {
+    type: 'archery',
+    challengerShots,
+    opponentShots,
+    challengerTotal,
+    opponentTotal,
+  };
+}
+
+export function resolveArchery(game) {
+  if (game.challengerTotal > game.opponentTotal) {
+    return 'challenger';
+  }
+
+  if (game.opponentTotal > game.challengerTotal) {
+    return 'opponent';
+  }
+
+  return 'tie';
+}
+
+/**
+ * Sprint Showdown Game
+ */
+export function createSprintGame() {
+  const challengerTime = randomInt(800, 1600);
+  const opponentTime = randomInt(800, 1600);
+
+  return {
+    type: 'sprint',
+    challengerTime,
+    opponentTime,
+  };
+}
+
+export function resolveSprint(game) {
+  if (game.challengerTime < game.opponentTime) {
+    return 'challenger';
+  }
+
+  if (game.opponentTime < game.challengerTime) {
+    return 'opponent';
+  }
+
   return 'tie';
 }
 
@@ -172,8 +258,11 @@ export function getGameDisplayName(gameType) {
     highcard: 'High Card',
     dice: 'Dice Duel',
     hilow: 'Hi-Lo',
-    reaction: 'Reaction Duel'
+    reaction: 'Reaction Duel',
+    coinflip: 'Coin Flip',
+    oddeven: 'Odd vs Even',
+    archery: 'Archery Shootout',
+    sprint: 'Sprint Showdown',
   };
   return names[gameType] || gameType;
 }
-

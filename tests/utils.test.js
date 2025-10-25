@@ -6,7 +6,9 @@ import {
   calculateBattleRake,
   randomInt,
   getMedalEmoji,
-  exportToCSV
+  exportToCSV,
+  hasImageAttachment,
+  getFirstImageUrl,
 } from '../src/lib/utils.js';
 
 describe('Utility Functions', () => {
@@ -22,11 +24,11 @@ describe('Utility Functions', () => {
     it('should parse valid Discord message link', () => {
       const link = 'https://discord.com/channels/123456789/987654321/111222333';
       const result = parseMessageLink(link);
-      
+
       expect(result).toEqual({
         guildId: '123456789',
         channelId: '987654321',
-        messageId: '111222333'
+        messageId: '111222333',
       });
     });
 
@@ -47,6 +49,11 @@ describe('Utility Functions', () => {
       expect(calculateTransferFee(10, 5)).toBe(1);
       expect(calculateTransferFee(5, 5)).toBe(1);
       expect(calculateTransferFee(1, 5)).toBe(1);
+    });
+
+    it('should allow zero fee when percentage is zero or negative', () => {
+      expect(calculateTransferFee(100, 0)).toBe(0);
+      expect(calculateTransferFee(100, -5)).toBe(0);
     });
   });
 
@@ -88,16 +95,76 @@ describe('Utility Functions', () => {
   describe('exportToCSV', () => {
     it('should export users to CSV format', () => {
       const users = [
-        { discordId: '123', vp: 100, streakDays: 5, blacklisted: false, createdAt: new Date('2024-01-01') },
-        { discordId: '456', vp: 50, streakDays: 0, blacklisted: true, createdAt: new Date('2024-01-02') }
+        {
+          discordId: '123',
+          vp: 100,
+          streakDays: 5,
+          blacklisted: false,
+          createdAt: new Date('2024-01-01'),
+        },
+        {
+          discordId: '456',
+          vp: 50,
+          streakDays: 0,
+          blacklisted: true,
+          createdAt: new Date('2024-01-02'),
+        },
       ];
 
       const csv = exportToCSV(users);
-      
+
       expect(csv).toContain('Discord ID,VP Balance,Streak Days,Blacklisted,Created At');
       expect(csv).toContain('123,100,5,false');
       expect(csv).toContain('456,50,0,true');
     });
   });
-});
 
+  describe('image helpers', () => {
+    const createAttachmentCollection = (items) => ({
+      size: items.length,
+      some: (fn) => items.some(fn),
+      find: (fn) => items.find(fn),
+      values: () => items[Symbol.iterator](),
+      [Symbol.iterator]: function* () {
+        for (const item of items) {
+          yield item;
+        }
+      },
+    });
+
+    it('detects image attachments', () => {
+      const attachment = {
+        name: 'photo.png',
+        url: 'https://cdn.example.com/photo.png',
+        contentType: 'image/png',
+      };
+      const message = {
+        attachments: createAttachmentCollection([attachment]),
+        embeds: [],
+      };
+
+      expect(hasImageAttachment(message)).toBe(true);
+      expect(getFirstImageUrl(message)).toBe(attachment.url);
+    });
+
+    it('detects embedded images', () => {
+      const message = {
+        attachments: createAttachmentCollection([]),
+        embeds: [{ image: { url: 'https://imgur.example.com/vouch.jpg' } }],
+      };
+
+      expect(hasImageAttachment(message)).toBe(true);
+      expect(getFirstImageUrl(message)).toBe('https://imgur.example.com/vouch.jpg');
+    });
+
+    it('returns false when no images are present', () => {
+      const message = {
+        attachments: createAttachmentCollection([]),
+        embeds: [],
+      };
+
+      expect(hasImageAttachment(message)).toBe(false);
+      expect(getFirstImageUrl(message)).toBeNull();
+    });
+  });
+});

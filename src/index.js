@@ -1,13 +1,20 @@
-import { Client, Collection, GatewayIntentBits, REST, Routes } from 'discord.js';
-import { config } from 'dotenv';
+import { Client, Collection, Events, GatewayIntentBits, MessageFlags, REST, Routes } from 'discord.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readdirSync } from 'fs';
 import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
-
-// Load environment variables
-config();
+import { handleBattleComponent, handleBattleSelect, isBattleInteraction } from './commands/battle.js';
+import { handleBlackjackInteraction } from './commands/blackjack.js';
+import { handleRouletteButton } from './commands/roulette.js';
+import { handleApproveVouchButton } from './commands/approvevouch.js';
+import { config as botConfig, assertConfig } from './config.js';
+import { logger } from './logger.js';
+import {
+  handleGiveawayButton,
+  initGiveaways,
+  isGiveawayButton,
+} from './features/giveaways/router.js';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);
@@ -19,8 +26,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
-  ]
+    GatewayIntentBits.GuildMembers,
+  ],
 });
 
 // Store commands in collection
@@ -31,12 +38,12 @@ client.commands = new Collection();
  */
 async function loadCommands() {
   const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter(file => file.endsWith('.js'));
+  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js') || file.endsWith('.ts'));
 
   for (const file of commandFiles) {
     const filePath = join(commandsPath, file);
     const command = await import(`file://${filePath}`);
-    
+
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
       console.log(`✅ Loaded command: ${command.data.name}`);
@@ -51,18 +58,18 @@ async function loadCommands() {
  */
 async function loadEvents() {
   const eventsPath = join(__dirname, 'events');
-  const eventFiles = readdirSync(eventsPath).filter(file => file.endsWith('.js'));
+  const eventFiles = readdirSync(eventsPath).filter((file) => file.endsWith('.js'));
 
   for (const file of eventFiles) {
     const filePath = join(eventsPath, file);
     const event = await import(`file://${filePath}`);
-    
+
     if (event.once) {
       client.once(event.name, (...args) => event.execute(...args));
     } else {
       client.on(event.name, (...args) => event.execute(...args));
     }
-    
+
     console.log(`✅ Loaded event: ${event.name}`);
   }
 }
@@ -72,36 +79,29 @@ async function loadEvents() {
  */
 async function registerCommands() {
   const commands = [];
-  
+
   for (const command of client.commands.values()) {
     commands.push(command.data.toJSON());
   }
 
-  const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+  const rest = new REST().setToken(botConfig.token);
 
   try {
     console.log(`🔄 Registering ${commands.length} slash commands...`);
 
     // Guild-specific registration (faster for development)
-    if (process.env.GUILD_ID) {
-      await rest.put(
-        Routes.applicationGuildCommands(
-          client.user.id,
-          process.env.GUILD_ID
-        ),
-        { body: commands }
-      );
+    if (botConfig.guildId) {
+      await rest.put(Routes.applicationGuildCommands(client.user.id, botConfig.guildId), {
+        body: commands,
+      });
       console.log('✅ Successfully registered guild commands');
     } else {
       // Global registration (takes up to 1 hour to propagate)
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commands }
-      );
+      await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
       console.log('✅ Successfully registered global commands');
     }
   } catch (error) {
-    console.error('❌ Error registering commands:', error);
+    logger.error('error registering commands', { err: error });
   }
 }
 
@@ -110,6 +110,7 @@ async function registerCommands() {
  */
 async function init() {
   try {
+    assertConfig();
     // Initialize database
     await initializeDatabase();
     console.log('✅ Database initialized');
@@ -119,19 +120,22 @@ async function init() {
     await loadEvents();
 
     // Login to Discord
-    await client.login(process.env.DISCORD_TOKEN);
+    await client.login(botConfig.token);
   } catch (error) {
-    console.error('❌ Failed to initialize bot:', error);
+    logger.error('failed to initialize bot', { err: error });
     process.exit(1);
   }
 }
 
 // Handle bot ready event
-client.once('ready', async () => {
+client.once(Events.ClientReady, async () => {
   console.log(`🚀 Bot is online as ${client.user.tag}`);
-  
+
   // Register commands
   await registerCommands();
+
+  // Initialize giveaway system
+  initGiveaways(client);
 
   // Initialize logger
   if (process.env.LOG_CHANNEL_ID) {
@@ -140,7 +144,7 @@ client.once('ready', async () => {
       initLogger(logChannel);
       console.log('✅ Logger initialized');
     } catch (error) {
-      console.warn('⚠️  Could not initialize logger:', error.message);
+      logger.warn('could not initialize channel logger', { err: error });
     }
   }
 
@@ -149,30 +153,95 @@ client.once('ready', async () => {
 
 // Handle interaction events (slash commands and buttons)
 client.on('interactionCreate', async (interaction) => {
-  // Handle slash commands
-  if (interaction.isChatInputCommand()) {
-    const command = client.commands.get(interaction.commandName);
+  try {
+    if (interaction.isChatInputCommand()) {
+      const command = client.commands.get(interaction.commandName);
 
-    if (!command) {
-      console.error(`No command matching ${interaction.commandName} was found.`);
+      if (!command) {
+        logger.warn('unknown command received', {
+          command: interaction.commandName,
+          userId: interaction.user?.id,
+        });
+        return;
+      }
+
+      try {
+        await command.execute(interaction, client);
+      } catch (error) {
+        logger.error(`error executing command ${interaction.commandName}`, {
+          err: error,
+          command: interaction.commandName,
+          userId: interaction.user?.id,
+        });
+
+        const errorMessage = {
+          content: '❌ There was an error executing this command!',
+          flags: MessageFlags.Ephemeral,
+        };
+
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorMessage);
+        } else {
+          await interaction.reply(errorMessage);
+        }
+      }
       return;
     }
 
-    try {
-      await command.execute(interaction, client);
-    } catch (error) {
-      console.error(`Error executing ${interaction.commandName}:`, error);
-      
-      const errorMessage = { 
-        content: '❌ There was an error executing this command!', 
-        ephemeral: true 
-      };
-
-      if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(errorMessage);
-      } else {
-        await interaction.reply(errorMessage);
+    if (interaction.isButton()) {
+      if (isBattleInteraction(interaction.customId)) {
+        const handled = await handleBattleComponent(interaction);
+        if (handled) {
+          return;
+        }
       }
+
+      const customId = interaction.customId ?? '';
+
+      if (isGiveawayButton(customId)) {
+        await handleGiveawayButton(interaction);
+        return;
+      }
+
+      if (customId.startsWith('approvevouch:')) {
+        await handleApproveVouchButton(interaction);
+        return;
+      }
+
+      if (customId.startsWith('bj_')) {
+        await handleBlackjackInteraction(interaction);
+        return;
+      }
+
+      if (customId.startsWith('roulette:')) {
+        const handled = await handleRouletteButton(interaction);
+        if (handled) {
+          return;
+        }
+      }
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      if (isBattleInteraction(interaction.customId)) {
+        const handled = await handleBattleSelect(interaction);
+        if (handled) {
+          return;
+        }
+      }
+    }
+  } catch (err) {
+    logger.error('interaction error', {
+      err,
+      type: interaction.type,
+      id: interaction.id,
+      user: interaction.user?.id,
+    });
+
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        ephemeral: true,
+        content: 'Something went wrong. Try again.',
+      });
     }
   }
 });
@@ -193,16 +262,21 @@ process.on('SIGTERM', async () => {
 });
 
 // Handle uncaught errors
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+process.on('uncaughtException', (error, origin) => {
+  logger.error('uncaught exception', {
+    err: error,
+    origin,
+  });
 });
 
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled Rejection:', error);
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('unhandled rejection', {
+    err: reason instanceof Error ? reason : new Error(String(reason)),
+    promiseState: promise && typeof promise === 'object' ? promise.constructor?.name : undefined,
+  });
 });
 
 // Start the bot
 init();
 
 export default client;
-

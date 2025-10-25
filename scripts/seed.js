@@ -39,7 +39,9 @@ async function main() {
       userId: user1.id,
       imageUrl: 'https://example.com/food1.jpg',
       providerMentioned: false,
-      status: 'pending'
+      status: 'pending',
+      channelId: '800000000000000001',
+      guildId: '700000000000000001'
     }
   });
 
@@ -49,7 +51,9 @@ async function main() {
       userId: user2.id,
       imageUrl: 'https://example.com/food2.jpg',
       providerMentioned: false,
-      status: 'pending'
+      status: 'pending',
+      channelId: '800000000000000002',
+      guildId: '700000000000000001'
     }
   });
 
@@ -65,7 +69,6 @@ async function main() {
     transfer_fee_percent: '5',
     battle_rake_percent: '2',
     bj_min: '1',
-    bj_max: '50',
     daily_amount: '1'
   };
 

@@ -11,21 +11,20 @@ export async function initializeDatabase() {
   const defaultConfig = {
     cooldown_hours: '0',
     require_provider_approval: 'true',
-    daily_rng_chance: '0.35',
+    daily_rng_chance: '0.10',
     five_cost: '25',
     free_cost: '60',
     transfer_fee_percent: '5',
     battle_rake_percent: '2',
     bj_min: '1',
-    bj_max: '50',
-    daily_amount: '1'
+    daily_amount: '1',
   };
 
   for (const [key, value] of Object.entries(defaultConfig)) {
     const existing = await prisma.config.findUnique({ where: { key } });
     if (!existing) {
       await prisma.config.create({
-        data: { key, value }
+        data: { key, value },
       });
     }
   }
@@ -38,12 +37,12 @@ export async function initializeDatabase() {
  */
 export async function getOrCreateUser(discordId) {
   let user = await prisma.user.findUnique({
-    where: { discordId }
+    where: { discordId },
   });
 
   if (!user) {
     user = await prisma.user.create({
-      data: { discordId }
+      data: { discordId },
     });
   }
 
@@ -65,16 +64,16 @@ export async function setConfig(key, value) {
   await prisma.config.upsert({
     where: { key },
     update: { value: value.toString() },
-    create: { key, value: value.toString() }
+    create: { key, value: value.toString() },
   });
 }
 
 /**
  * Add VP to user with transaction safety
  */
-export async function addVP(discordId, amount, reason = 'Unknown') {
+export async function addVP(discordId, amount, _reason = 'Unknown') {
   const user = await getOrCreateUser(discordId);
-  
+
   if (user.blacklisted) {
     throw new Error('User is blacklisted');
   }
@@ -83,9 +82,9 @@ export async function addVP(discordId, amount, reason = 'Unknown') {
     where: { id: user.id },
     data: {
       vp: {
-        increment: amount
-      }
-    }
+        increment: amount,
+      },
+    },
   });
 
   return updated;
@@ -96,7 +95,7 @@ export async function addVP(discordId, amount, reason = 'Unknown') {
  */
 export async function removeVP(discordId, amount) {
   const user = await getOrCreateUser(discordId);
-  
+
   if (user.vp < amount) {
     throw new Error('Insufficient VP balance');
   }
@@ -105,9 +104,9 @@ export async function removeVP(discordId, amount) {
     where: { id: user.id },
     data: {
       vp: {
-        decrement: amount
-      }
-    }
+        decrement: amount,
+      },
+    },
   });
 
   return updated;
@@ -134,13 +133,13 @@ export async function transferVP(fromDiscordId, toDiscordId, amount, fee) {
     // Deduct from sender
     const updatedFrom = await tx.user.update({
       where: { id: fromUser.id },
-      data: { vp: { decrement: totalCost } }
+      data: { vp: { decrement: totalCost } },
     });
 
     // Add to recipient
     const updatedTo = await tx.user.update({
       where: { id: toUser.id },
-      data: { vp: { increment: amount } }
+      data: { vp: { increment: amount } },
     });
 
     // Create transfer record
@@ -149,8 +148,8 @@ export async function transferVP(fromDiscordId, toDiscordId, amount, fee) {
         fromUserId: fromUser.id,
         toUserId: toUser.id,
         amount,
-        fee
-      }
+        fee,
+      },
     });
 
     return { updatedFrom, updatedTo, transfer };
@@ -164,17 +163,14 @@ export async function transferVP(fromDiscordId, toDiscordId, amount, fee) {
  */
 export async function hasActiveBattle(discordId) {
   const user = await getOrCreateUser(discordId);
-  
+
   const activeBattle = await prisma.battle.findFirst({
     where: {
-      OR: [
-        { challengerId: user.id },
-        { opponentId: user.id }
-      ],
+      OR: [{ challengerId: user.id }, { opponentId: user.id }],
       status: {
-        in: ['open', 'accepted']
-      }
-    }
+        in: ['open', 'accepted'],
+      },
+    },
   });
 
   return activeBattle !== null;
@@ -185,12 +181,12 @@ export async function hasActiveBattle(discordId) {
  */
 export async function hasActiveBlackjack(discordId) {
   const user = await getOrCreateUser(discordId);
-  
+
   const activeRound = await prisma.blackjackRound.findFirst({
     where: {
       userId: user.id,
-      result: null
-    }
+      result: null,
+    },
   });
 
   return activeRound !== null;
@@ -201,26 +197,26 @@ export async function hasActiveBlackjack(discordId) {
  */
 export async function getLeaderboard(page = 1, perPage = 10) {
   const skip = (page - 1) * perPage;
-  
+
   const users = await prisma.user.findMany({
     orderBy: {
-      vp: 'desc'
+      vp: 'desc',
     },
     skip,
     take: perPage,
     where: {
       vp: {
-        gt: 0
-      }
-    }
+        gt: 0,
+      },
+    },
   });
 
   const totalUsers = await prisma.user.count({
     where: {
       vp: {
-        gt: 0
-      }
-    }
+        gt: 0,
+      },
+    },
   });
 
   return {
@@ -228,7 +224,6 @@ export async function getLeaderboard(page = 1, perPage = 10) {
     page,
     perPage,
     totalPages: Math.ceil(totalUsers / perPage),
-    totalUsers
+    totalUsers,
   };
 }
-
