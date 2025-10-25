@@ -20,6 +20,10 @@ RUN npx prisma generate
 # Create data directory
 RUN mkdir -p /data
 
+# Copy startup script
+COPY scripts/start.sh /start.sh
+RUN chmod +x /start.sh
+
 # Run migrations and start bot
-CMD ["sh", "-c", "npx prisma migrate deploy && node src/index.js"]
+CMD ["/start.sh"]
 
