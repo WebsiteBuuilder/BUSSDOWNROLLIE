@@ -1,4 +1,3 @@
-import 'ts-node/register/esm';
 import { Client, Collection, Events, GatewayIntentBits, MessageFlags, REST, Routes } from 'discord.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
