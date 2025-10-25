@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
-import { getGiveawayService } from '../features/giveaways/router.ts';
+import { getGiveawayService } from '../features/giveaways/router.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gbuyin')

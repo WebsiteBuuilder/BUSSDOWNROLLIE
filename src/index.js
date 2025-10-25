@@ -15,7 +15,7 @@ import {
   handleGiveawayButton,
   initGiveaways,
   isGiveawayButton,
-} from './features/giveaways/router.ts';
+} from './features/giveaways/router.js';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);

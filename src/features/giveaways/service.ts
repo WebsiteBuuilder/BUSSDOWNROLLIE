@@ -10,7 +10,7 @@ import {
   GiveawayEntry,
   GiveawayPotSnapshot,
   GiveawayState,
-} from './model.ts';
+} from './model.js';
 import {
   addEntry,
   clearEntries,
@@ -25,10 +25,10 @@ import {
   listEntrants,
   updateConfig as updateStoredConfig,
   updateGiveaway,
-} from './db.ts';
-import { GiveawayAuditService } from './audit.ts';
-import { GiveawayLockManager } from './locks.ts';
-import { addPoints, getBalance, subtractPoints } from './economy.ts';
+} from './db.js';
+import { GiveawayAuditService } from './audit.js';
+import { GiveawayLockManager } from './locks.js';
+import { addPoints, getBalance, subtractPoints } from './economy.js';
 import {
   buildGiveawayComponents,
   buildGiveawayEmbed,
@@ -37,8 +37,8 @@ import {
   buildWheelAnnouncement,
   buildWinnerEmbed,
   entrantsReply,
-} from './ui.ts';
-import { runFallbackWheel } from './wheel.ts';
+} from './ui.js';
+import { runFallbackWheel } from './wheel.js';
 import { logger } from '../../logger.js';
 
 export interface GiveawayConfigInput {

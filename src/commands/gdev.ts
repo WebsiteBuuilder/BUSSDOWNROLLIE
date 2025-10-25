@@ -3,7 +3,7 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
 } from 'discord.js';
-import { getGiveawayScheduler, getGiveawayService } from '../features/giveaways/router.ts';
+import { getGiveawayScheduler, getGiveawayService } from '../features/giveaways/router.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gdev')

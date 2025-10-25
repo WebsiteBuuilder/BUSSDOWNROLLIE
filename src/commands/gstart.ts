@@ -2,9 +2,9 @@ import { SlashCommandBuilder, PermissionFlagsBits, ChatInputCommandInteraction }
 import {
   getGiveawayScheduler,
   getGiveawayService,
-} from '../features/giveaways/router.ts';
-import { parseDuration } from '../features/giveaways/utils.ts';
-import { buildStatusEmbed } from '../features/giveaways/ui.ts';
+} from '../features/giveaways/router.js';
+import { parseDuration } from '../features/giveaways/utils.js';
+import { buildStatusEmbed } from '../features/giveaways/ui.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gstart')
