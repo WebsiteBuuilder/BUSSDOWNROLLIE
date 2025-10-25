@@ -2,11 +2,13 @@
   "name": "guhd-eats-bot",
   "version": "1.0.0",
   "description": "GUHD EATS Discord bot with VP economy system",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
     "dev": "node src/index.js",
-    "start": "node src/index.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "postinstall": "node -e \"try{require('better-sqlite3');}catch(e){process.exit(0)}\" || npm rebuild better-sqlite3",
     "test": "vitest run --config vitest.config.js",
     "test:watch": "vitest --config vitest.config.js",
     "prisma:generate": "prisma generate",
@@ -27,12 +29,12 @@
     "better-sqlite3": "^9.6.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
-    "ts-node": "^10.9.2",
-    "tslib": "^2.6.2",
-    "typescript": "^5.4.5"
+    "tslib": "^2.6.2"
   },
   "devDependencies": {
     "prisma": "^6.17.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
     "vitest": "^1.1.0"
   },
   "engines": {

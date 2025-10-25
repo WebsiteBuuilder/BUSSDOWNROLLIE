@@ -10,6 +10,7 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
     "allowJs": true,
+    "outDir": "dist",
     "types": ["node"],
     "baseUrl": "src"
   },
