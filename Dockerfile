@@ -34,14 +34,16 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
+# Install OpenSSL for Prisma compatibility
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+
 # Copy only what we need at runtime
 COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 
-# If better-sqlite3 needs to rebind on this layer, allow rebuild fallback
-# (usually not needed because builder compiled it already for the same base)
-RUN node -e "try{require('better-sqlite3');console.log('better-sqlite3 OK')}catch(e){process.exit(1)}" || npm rebuild better-sqlite3
+# Copy Prisma schema and migrations
+COPY --from=builder /app/prisma ./prisma
 
 # Copy startup script
 COPY scripts/start.sh /start.sh
