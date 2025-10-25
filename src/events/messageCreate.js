@@ -105,13 +105,19 @@ export async function execute(message) {
         acknowledgementLines.push(`Current balance: ${formatVP(updatedUser.vp)}.`);
       }
 
-      try {
-        await message.channel.send({
-          content: acknowledgementLines.join('\n'),
-          allowedMentions: { users: [message.author.id] },
-        });
-      } catch (sendError) {
-        console.warn('Failed to send vouch acknowledgement message', sendError);
+      const sendAcknowledgement = message.channel?.send;
+
+      if (typeof sendAcknowledgement === 'function') {
+        try {
+          await sendAcknowledgement.call(message.channel, {
+            content: acknowledgementLines.join('\n'),
+            allowedMentions: { users: [message.author.id] },
+          });
+        } catch (sendError) {
+          console.warn('Failed to send vouch acknowledgement message', sendError);
+        }
+      } else {
+        console.warn('Failed to send vouch acknowledgement message: channel.send is not available');
       }
 
       // Log transaction
