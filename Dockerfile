@@ -44,4 +44,4 @@ COPY --from=builder /app/dist ./dist
 RUN node -e "try{require('better-sqlite3');console.log('better-sqlite3 OK')}catch(e){process.exit(1)}" || npm rebuild better-sqlite3
 
 # Default command
-CMD ["node", "dist/src/index.js"]
+CMD ["sh", "-c", "set -euo pipefail; entry=$(node -p \"const pkg=require('./package.json');pkg.main||'dist/index.js'\"); if [ ! -f \"$entry\" ]; then echo \"Error: runtime entry '$entry' not found\" >&2; exit 1; fi; exec node \"$entry\""]
