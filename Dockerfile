@@ -30,7 +30,8 @@ RUN npm prune --omit=dev
 FROM node:20-bookworm-slim AS runner
 ENV NODE_ENV=production \
     npm_config_fund=false \
-    npm_config_audit=false
+    npm_config_audit=false \
+    DATABASE_URL=file:/data/guhdeats.db
 
 WORKDIR /app
 
