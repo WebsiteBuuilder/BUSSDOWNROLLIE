@@ -44,4 +44,4 @@ COPY --from=builder /app/dist ./dist
 RUN node -e "try{require('better-sqlite3');console.log('better-sqlite3 OK')}catch(e){process.exit(1)}" || npm rebuild better-sqlite3
 
 # Default command
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/src/index.js"]
