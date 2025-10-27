@@ -235,9 +235,9 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   const {
     width = 350,      // ULTRA compression for guaranteed <3MB
     height = 350,
-    duration = 9000,  // 9 seconds
-    fps = 12,         // 12 FPS (108 frames - minimal)
-    quality = 5       // 5 = aggressive compression
+    duration = 10500, // 10.5 seconds (longer for smooth animation + 3s rest)
+    fps = 15,         // 15 FPS (smoother animation, still fast encoding)
+    quality = 6       // 6 = slightly better compression speed, still small
   } = options;
 
   const totalFrames = Math.floor((duration / 1000) * fps);
@@ -257,10 +257,11 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     encoder.setRepeat(0);              // Loop forever
     encoder.start();
 
-    // Animation parameters
-    const spinDuration = 0.75;  // 75% spinning
-    const restDuration = 0.15;   // 15% ball resting on number
-    const resultDuration = 0.10; // 10% showing overlay
+    // Animation parameters (total 10.5 seconds)
+    const spinDuration = 0.57;    // 57% fast spinning (6s)
+    const slowdownDuration = 0.095; // 9.5% gradual slowdown (1s)
+    const restDuration = 0.285;   // 28.5% ball resting still (3s)
+    const resultDuration = 0.05;  // 5% showing overlay (0.5s)
     
     // Find winning segment index
     const winningIndex = ROULETTE_NUMBERS.findIndex((s) => s.num === winningNumber);
@@ -278,36 +279,51 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     for (let frame = 0; frame < totalFrames; frame++) {
       try {
         const progress = frame / totalFrames;
-        const spinProgress = Math.min(progress / spinDuration, 1);
-        const easedProgress = easeOutQuartic(spinProgress); // Use stronger easing
-
-        // Wheel rotation with randomized spins
-        const wheelRotation = easedProgress * (Math.PI * 2 * randomSpins) + targetAngle * easedProgress;
-
+        
         // Determine animation phase
         const isSpinning = progress < spinDuration;
-        const isResting = progress >= spinDuration && progress < spinDuration + restDuration;
-        const showResult = progress > spinDuration + restDuration;
+        const isSlowingDown = progress >= spinDuration && progress < spinDuration + slowdownDuration;
+        const isResting = progress >= spinDuration + slowdownDuration && progress < spinDuration + slowdownDuration + restDuration;
+        const showResult = progress >= spinDuration + slowdownDuration + restDuration;
         
-        // Ball physics
-        let ballAngle, ballRadius;
+        let wheelRotation, ballAngle, ballRadius;
         
         if (isSpinning) {
-          // During spin: ball moves counter to wheel direction
+          // Fast spinning phase
+          const spinProgress = progress / spinDuration;
+          const easedProgress = easeOutQuartic(spinProgress);
+          wheelRotation = easedProgress * (Math.PI * 2 * randomSpins) + targetAngle * easedProgress;
+          
           const ballSpeed = (1 - easedProgress) * 16 + 3;
           ballAngle = -progress * Math.PI * 2 * ballSpeed;
-          const maxRadius = Math.min(width, height) * 0.42; // Starts at outer edge
-          const minRadius = Math.min(width, height) * 0.38; // Spirals inward
+          const maxRadius = Math.min(width, height) * 0.42;
+          const minRadius = Math.min(width, height) * 0.38;
           ballRadius = maxRadius - easedProgress * (maxRadius - minRadius);
+          
+        } else if (isSlowingDown) {
+          // Gradual slowdown phase (1 second)
+          const slowdownProgress = (progress - spinDuration) / slowdownDuration;
+          const easeSlowdown = easeOutCubic(slowdownProgress); // Gentler for slowdown
+          
+          // Wheel continues to target angle
+          const finalSpin = 1.0; // Almost at target
+          wheelRotation = (finalSpin) * (Math.PI * 2 * randomSpins) + targetAngle * (1.0 - slowdownProgress * 0.1);
+          
+          // Ball gradually settles
+          const startBallSpeed = 3;
+          const endBallSpeed = 0.2;
+          const ballSpeed = startBallSpeed - (startBallSpeed - endBallSpeed) * easeSlowdown;
+          ballAngle = -((spinDuration + slowdownProgress * slowdownDuration) * Math.PI * 2 * ballSpeed) - targetAngle * slowdownProgress;
+          ballRadius = Math.min(width, height) * 0.38;
+          
         } else {
-          // During rest or result: ball stays at final position
-          const finalBallSpeed = 3;
-          const finalProgress = spinDuration;
-          ballAngle = -finalProgress * Math.PI * 2 * finalBallSpeed - targetAngle;
+          // Resting or result: completely still
+          wheelRotation = (Math.PI * 2 * randomSpins) + targetAngle;
+          ballAngle = -targetAngle; // Aligned with winning segment
           ballRadius = Math.min(width, height) * 0.38;
         }
         
-        const showBall = progress < (spinDuration + restDuration);
+        const showBall = !showResult; // Hide ball only during result overlay
 
         // Draw frame
         drawRouletteFrame(
