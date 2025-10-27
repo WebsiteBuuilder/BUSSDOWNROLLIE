@@ -287,20 +287,39 @@ async function spinWheel(interaction, state, commandId) {
   try {
     console.log(`🎬 [OPTIMIZED] Generating cinematic spin animation...`);
     const startGen = Date.now();
-    
-    const result = await generateCinematicSpin(pocket.number, {
+
+    const job = await generateCinematicSpin(pocket.number, {
       duration: 3500,
       fps: 20,
       quality: 15
     });
-    
-    const gifBuffer = result.buffer;
+
+    const previewAttachment = new AttachmentBuilder(job.preview.buffer, {
+      name: 'roulette-preview.png',
+      description: `Preview frame for number ${pocket.number}`
+    });
+
+    const previewEmbed = createSpinEmbed(
+      state.displayName,
+      '🎞️ Preview',
+      '🖼️ First frame ready — encoding cinematic spin...',
+      state.totalBet,
+      'attachment://roulette-preview.png'
+    );
+
+    await spinMessage.edit({
+      embeds: [previewEmbed],
+      files: [previewAttachment],
+      components: []
+    });
+
+    const result = await job.final;
     animationMetadata = result.metadata;
-    
+
     const genTime = ((Date.now() - startGen) / 1000).toFixed(2);
     console.log(`⚡ Generation complete in ${genTime}s - Size: ${animationMetadata.sizeMB}MB`);
-    
-    const attachment = new AttachmentBuilder(gifBuffer, { 
+
+    const attachment = new AttachmentBuilder(result.buffer, {
       name: 'roulette-spin.gif',
       description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
     });
@@ -311,10 +330,9 @@ async function spinWheel(interaction, state, commandId) {
       components: []
     });
 
-    // Wait for animation to play (use actual duration)
     const playDuration = animationMetadata.duration || 3500;
     await new Promise(resolve => setTimeout(resolve, playDuration));
-    
+
     console.log(`✅ Cinematic animation completed | ${animationMetadata.frames} frames | ${animationMetadata.sizeMB}MB | ${animationMetadata.encodeTimeSeconds}s`);
     animationSuccess = true;
     
