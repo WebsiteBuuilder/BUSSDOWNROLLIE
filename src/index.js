@@ -15,6 +15,8 @@ import {
   initGiveaways,
   isGiveawayButton,
 } from './features/giveaways/router.js';
+import { runStartupValidation } from './utils/startup-validator.js';
+import { getAnimationStatus } from './roulette/safe-animation.js';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);
@@ -276,7 +278,25 @@ process.on('unhandledRejection', (reason, promise) => {
   });
 });
 
-// Start the bot
-init();
+// Start the bot with validation
+(async () => {
+  try {
+    // Run startup validation
+    await runStartupValidation();
+    
+    // Check animation status
+    const animStatus = await getAnimationStatus();
+    console.log(`🎨 Roulette Animation Mode: ${animStatus.mode}`);
+    if (animStatus.fallback) {
+      console.log('⚠️  Running in fallback mode - cinematic animations disabled');
+    }
+    
+    // Initialize bot
+    await init();
+  } catch (error) {
+    console.error('❌ Fatal startup error:', error);
+    process.exit(1);
+  }
+})();
 
 export default client;

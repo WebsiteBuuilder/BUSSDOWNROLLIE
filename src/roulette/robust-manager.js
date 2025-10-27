@@ -10,7 +10,11 @@ import {
   getNumberColor
 } from './simple-ui.js';
 import { createDetailedRulesEmbed } from './lobby-ui.js';
-import { generateCinematicSpin, animateLiteMode } from './cinematic-animation.js';
+import { 
+  safeGenerateCinematicSpin, 
+  safeAnimateLiteMode,
+  isCinematicAvailable 
+} from './safe-animation.js';
 import { AttachmentBuilder } from 'discord.js';
 import { safeReply, ackWithin3s } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
@@ -266,12 +270,12 @@ async function spinWheel(interaction, state, commandId) {
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
-  // Animate the wheel with cinematic effects
+  // Animate the wheel with safe cinematic effects
   if (USE_CINEMATIC_ANIMATION) {
     try {
-      console.log(`🎬 Generating cinematic spin animation...`);
+      console.log(`🎬 Attempting cinematic spin animation...`);
       
-      const gifBuffer = await generateCinematicSpin(pocket.number, {
+      const gifBuffer = await safeGenerateCinematicSpin(pocket.number, {
         duration: 4000,
         fps: 30,
         quality: 10
@@ -292,10 +296,17 @@ async function spinWheel(interaction, state, commandId) {
       // Wait for animation to complete
       await new Promise(resolve => setTimeout(resolve, 4000));
       
+      console.log('✅ Cinematic animation completed successfully');
+      
     } catch (cinematicError) {
-      console.error('❌ Cinematic animation failed, falling back to lite mode:', cinematicError);
-      // Fallback to lite mode
-      await animateLiteMode(
+      if (cinematicError.message === 'FALLBACK_MODE') {
+        console.warn('⚠️  Cinematic mode unavailable, using lite mode fallback');
+      } else {
+        console.error('❌ Cinematic animation error:', cinematicError.message);
+      }
+      
+      // Safe fallback to lite mode
+      await safeAnimateLiteMode(
         async (frame, caption) => {
           await interaction.editReply({
             embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
@@ -306,8 +317,8 @@ async function spinWheel(interaction, state, commandId) {
       );
     }
   } else {
-    // Use lite mode animation
-    await animateLiteMode(
+    // Use safe lite mode animation
+    await safeAnimateLiteMode(
       async (frame, caption) => {
         await interaction.editReply({
           embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
