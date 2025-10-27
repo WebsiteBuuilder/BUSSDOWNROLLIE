@@ -7,9 +7,16 @@ ENV npm_config_fund=false \
 
 WORKDIR /app
 
-# Install build toolchain needed for native modules during build
+# Install build toolchain + canvas native dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ \
+    build-essential \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
+    pkg-config \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy lockfiles FIRST for better Docker layer caching
@@ -35,8 +42,16 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma compatibility
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+# Install runtime libraries for canvas + OpenSSL for Prisma
+RUN apt-get update && apt-get install -y \
+    openssl \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libjpeg62-turbo \
+    libgif7 \
+    librsvg2-2 \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy only what we need at runtime
 COPY --from=builder /app/package.json /app/package-lock.json ./

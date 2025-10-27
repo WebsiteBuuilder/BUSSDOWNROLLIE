@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 /**
- * Roulette Dependencies Validator
+ * Roulette Dependencies Validator - STRICT MODE
  * Pre-flight check to ensure all roulette animation dependencies are installed
- * Runs before bot startup to prevent crashes
+ * FAILS HARD if dependencies can't be installed or tested
  */
 
 import { readFileSync } from 'fs';
@@ -15,16 +15,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const REQUIRED_DEPS = [
-  'canvas',
-  'gifencoder',
+  { name: 'canvas', version: '^2.11.2' },
+  { name: 'gifencoder', version: '^2.0.1' },
 ];
 
-const OPTIONAL_DEPS = [
-  'node-canvas-gif',
-  '@napi-rs/canvas'
-];
+const MAX_INSTALL_RETRIES = 3;
 
-console.log('🔍 Validating roulette animation dependencies...\n');
+console.log('╔═══════════════════════════════════════════════════╗');
+console.log('║  GUHD EATS - Roulette Dependencies Validator     ║');
+console.log('║              STRICT MODE - NO FALLBACK            ║');
+console.log('╚═══════════════════════════════════════════════════╝\n');
 
 /**
  * Check if a package is installed
@@ -40,24 +40,10 @@ function isPackageInstalled(packageName) {
 }
 
 /**
- * Check if package.json includes dependency
+ * Auto-install missing dependency with retries
  */
-function isInPackageJson(packageName) {
-  try {
-    const packageJsonPath = join(__dirname, '..', 'package.json');
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
-    return !!(packageJson.dependencies?.[packageName] || packageJson.devDependencies?.[packageName]);
-  } catch (error) {
-    console.error(`❌ Failed to read package.json: ${error.message}`);
-    return false;
-  }
-}
-
-/**
- * Auto-install missing dependency
- */
-function installPackage(packageName, version = 'latest') {
-  console.log(`📦 Installing ${packageName}@${version}...`);
+function installPackage(packageName, version, attempt = 1) {
+  console.log(`📦 Installing ${packageName}@${version} (attempt ${attempt}/${MAX_INSTALL_RETRIES})...`);
   try {
     execSync(`npm install ${packageName}@${version}`, {
       stdio: 'inherit',
@@ -67,6 +53,12 @@ function installPackage(packageName, version = 'latest') {
     return true;
   } catch (error) {
     console.error(`❌ Failed to install ${packageName}: ${error.message}\n`);
+    
+    if (attempt < MAX_INSTALL_RETRIES) {
+      console.log(`🔄 Retrying installation...`);
+      return installPackage(packageName, version, attempt + 1);
+    }
+    
     return false;
   }
 }
@@ -75,54 +67,50 @@ function installPackage(packageName, version = 'latest') {
  * Validate all required dependencies
  */
 function validateDependencies() {
-  let missingRequired = [];
-  let missingOptional = [];
-  let allValid = true;
-
-  // Check required dependencies
   console.log('📋 Checking required dependencies:\n');
+  
+  let allInstalled = true;
+  
   for (const dep of REQUIRED_DEPS) {
-    const installed = isPackageInstalled(dep);
-    const inPackageJson = isInPackageJson(dep);
-
+    const installed = isPackageInstalled(dep.name);
+    
     if (!installed) {
-      console.log(`❌ ${dep} - NOT INSTALLED`);
-      missingRequired.push(dep);
-      allValid = false;
-    } else if (!inPackageJson) {
-      console.log(`⚠️  ${dep} - Installed but not in package.json`);
+      console.log(`❌ ${dep.name} - NOT INSTALLED`);
+      console.log(`   Attempting automatic installation...\n`);
+      
+      const success = installPackage(dep.name, dep.version);
+      if (!success) {
+        console.error(`\n❌ CRITICAL: Failed to install ${dep.name} after ${MAX_INSTALL_RETRIES} attempts`);
+        allInstalled = false;
+      }
     } else {
-      console.log(`✅ ${dep} - OK`);
+      console.log(`✅ ${dep.name} - OK`);
     }
   }
-
-  // Check optional dependencies
-  console.log('\n📋 Checking optional dependencies:\n');
-  for (const dep of OPTIONAL_DEPS) {
-    const installed = isPackageInstalled(dep);
-    if (!installed) {
-      console.log(`⚠️  ${dep} - Not installed (optional)`);
-      missingOptional.push(dep);
-    } else {
-      console.log(`✅ ${dep} - OK`);
-    }
-  }
-
-  return { missingRequired, missingOptional, allValid };
+  
+  console.log('');
+  return allInstalled;
 }
 
 /**
  * Test canvas and gifencoder imports
  */
 async function testImports() {
-  console.log('\n🧪 Testing module imports...\n');
+  console.log('🧪 Testing module imports...\n');
   
   try {
     // Test canvas
     console.log('Testing canvas import...');
     const { createCanvas } = await import('canvas');
-    const testCanvas = createCanvas(100, 100);
-    if (!testCanvas) throw new Error('Canvas creation failed');
+    if (!createCanvas) {
+      throw new Error('createCanvas function not available');
+    }
+    
+    // Create a test canvas to verify it works
+    const testCanvas = createCanvas(10, 10);
+    if (!testCanvas) {
+      throw new Error('Canvas creation failed');
+    }
     console.log('✅ canvas - Import successful\n');
   } catch (error) {
     console.error(`❌ canvas - Import failed: ${error.message}\n`);
@@ -133,8 +121,14 @@ async function testImports() {
     // Test gifencoder
     console.log('Testing gifencoder import...');
     const GIFEncoder = (await import('gifencoder')).default;
-    const testEncoder = new GIFEncoder(100, 100);
-    if (!testEncoder) throw new Error('GIFEncoder creation failed');
+    if (!GIFEncoder) {
+      throw new Error('GIFEncoder class not available');
+    }
+    
+    const testEncoder = new GIFEncoder(10, 10);
+    if (!testEncoder) {
+      throw new Error('GIFEncoder creation failed');
+    }
     console.log('✅ gifencoder - Import successful\n');
   } catch (error) {
     console.error(`❌ gifencoder - Import failed: ${error.message}\n`);
@@ -145,59 +139,117 @@ async function testImports() {
 }
 
 /**
+ * Perform actual test render to verify canvas + gifencoder work together
+ */
+async function testRender() {
+  console.log('🎨 Testing canvas rendering + GIF encoding...\n');
+  
+  try {
+    const { createCanvas } = await import('canvas');
+    const GIFEncoder = (await import('gifencoder')).default;
+    
+    // Create test canvas
+    const canvas = createCanvas(100, 100);
+    const ctx = canvas.getContext('2d');
+    
+    // Draw test content (GUHD EATS colors)
+    ctx.fillStyle = '#00FF75'; // Neon green
+    ctx.fillRect(0, 0, 100, 100);
+    ctx.fillStyle = '#FFD700'; // Gold
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText('TEST', 20, 50);
+    
+    // Draw a circle to test more complex rendering
+    ctx.beginPath();
+    ctx.arc(50, 50, 30, 0, Math.PI * 2);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    
+    // Test GIF encoder
+    console.log('   Encoding test GIF...');
+    const encoder = new GIFEncoder(100, 100);
+    encoder.start();
+    encoder.setRepeat(0);
+    encoder.setDelay(100);
+    encoder.setQuality(10);
+    encoder.addFrame(ctx);
+    encoder.finish();
+    const buffer = encoder.out.getData();
+    
+    if (buffer.length === 0) {
+      throw new Error('GIF encoder produced empty buffer');
+    }
+    
+    console.log(`   Generated ${buffer.length} bytes`);
+    console.log('✅ Test render successful - Canvas + GIF encoding working!\n');
+    return true;
+  } catch (error) {
+    console.error(`❌ Test render failed: ${error.message}`);
+    console.error(`   Stack: ${error.stack}\n`);
+    return false;
+  }
+}
+
+/**
  * Main validation flow
  */
 async function main() {
-  console.log('╔═══════════════════════════════════════════════════╗');
-  console.log('║   GUHD EATS - Roulette Dependencies Validator    ║');
-  console.log('╚═══════════════════════════════════════════════════╝\n');
-
-  // Step 1: Validate dependencies
-  const { missingRequired, missingOptional, allValid } = validateDependencies();
-
-  // Step 2: Auto-install missing required dependencies
-  if (missingRequired.length > 0) {
-    console.log('\n🔧 Auto-installing missing required dependencies...\n');
-    
-    const versions = {
-      'canvas': '^2.11.2',
-      'gifencoder': '^2.0.1'
-    };
-
-    for (const dep of missingRequired) {
-      const success = installPackage(dep, versions[dep] || 'latest');
-      if (!success) {
-        console.error(`\n❌ CRITICAL: Failed to install ${dep}`);
-        console.error('Roulette animation will be disabled. Bot will use fallback mode.\n');
-        process.exit(0); // Exit gracefully, not error
-      }
+  let exitCode = 0;
+  
+  try {
+    // Step 1: Validate/install dependencies
+    const depsInstalled = validateDependencies();
+    if (!depsInstalled) {
+      console.error('╔═══════════════════════════════════════════════════╗');
+      console.error('║      ❌ DEPENDENCY INSTALLATION FAILED            ║');
+      console.error('╚═══════════════════════════════════════════════════╝\n');
+      console.error('Required packages could not be installed.');
+      console.error('Cinematic animation will be DISABLED.\n');
+      process.exit(1);
     }
-  }
 
-  // Step 3: Test imports
-  const importsWork = await testImports();
-  
-  if (!importsWork) {
-    console.error('⚠️  WARNING: Module imports failed.');
-    console.error('Roulette will use text-based animation fallback.\n');
-    process.exit(0); // Graceful exit
-  }
+    // Step 2: Test imports
+    const importsWork = await testImports();
+    if (!importsWork) {
+      console.error('╔═══════════════════════════════════════════════════╗');
+      console.error('║         ❌ MODULE IMPORT FAILED                   ║');
+      console.error('╚═══════════════════════════════════════════════════╝\n');
+      console.error('Packages are installed but cannot be imported.');
+      console.error('This may indicate missing system dependencies.');
+      console.error('Cinematic animation will be DISABLED.\n');
+      process.exit(1);
+    }
 
-  // Step 4: Final summary
-  console.log('╔═══════════════════════════════════════════════════╗');
-  console.log('║            ✅ VALIDATION COMPLETE                 ║');
-  console.log('╚═══════════════════════════════════════════════════╝\n');
-  console.log('🎰 Roulette animation system verified and ready');
-  console.log('🎨 Cinematic 3D wheel rendering: ENABLED');
-  console.log('✨ "STILL GUUHHHD 🎰" branding: ACTIVE\n');
-  
-  process.exit(0);
+    // Step 3: Test actual rendering
+    const testRenderPassed = await testRender();
+    if (!testRenderPassed) {
+      console.error('╔═══════════════════════════════════════════════════╗');
+      console.error('║         ❌ RENDER TEST FAILED                     ║');
+      console.error('╚═══════════════════════════════════════════════════╝\n');
+      console.error('Canvas and GIF encoder are available but rendering failed.');
+      console.error('This may indicate corrupted dependencies or system libraries.');
+      console.error('Cinematic animation will be DISABLED.\n');
+      process.exit(1);
+    }
+
+    // All checks passed!
+    console.log('╔═══════════════════════════════════════════════════╗');
+    console.log('║       ✅ ALL VALIDATIONS PASSED                   ║');
+    console.log('╚═══════════════════════════════════════════════════╝\n');
+    console.log('🎰 Cinematic roulette animation system: READY');
+    console.log('🎨 3D wheel rendering: ENABLED');
+    console.log('🎬 Motion blur & lighting: ENABLED');
+    console.log('✨ "STILL GUUHHHD 🎰" branding: ACTIVE\n');
+    
+    process.exit(0);
+    
+  } catch (error) {
+    console.error('\n❌ Validation script crashed:', error);
+    console.error('Cinematic animation will be DISABLED.\n');
+    process.exit(1);
+  }
 }
 
 // Run validation
-main().catch(error => {
-  console.error('\n❌ Validation script crashed:', error);
-  console.error('Bot will start in safe mode with animation disabled.\n');
-  process.exit(0); // Graceful exit even on script error
-});
-
+main();

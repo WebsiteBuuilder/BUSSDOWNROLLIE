@@ -212,36 +212,4 @@ export async function animateRouletteWithUpdates(updateCallback, winningNumber, 
   console.log(`✅ Animation complete: Number ${winningNumber}`);
 }
 
-/**
- * Lightweight animation alternative (static images with text animation)
- * For faster performance when GIF generation is too slow
- * @param {Function} updateCallback - Callback function (caption)
- * @param {string} winningFrame - The final winning display
- */
-export async function animateLiteMode(updateCallback, winningFrame) {
-  const sequences = [
-    { count: 8, delay: 80, frame: '🎡 ⚪🔴⚫⚪🔴⚫⚪🔴⚫⚪', caption: '🎡 The wheel spins at breakneck speed... ⚡' },
-    { count: 6, delay: 150, frame: '🎡 ⚫⚪🔴⚫⚪🔴⚫⚪🔴⚫', caption: '⏳ The wheel begins to slow... 🌀' },
-    { count: 4, delay: 400, frame: '🎡 🔴⚫⚪🔴⚫⚪🔴⚫⚪🔴', caption: '💫 Almost there... Final moments! ⏰' },
-  ];
-
-  for (const seq of sequences) {
-    for (let i = 0; i < seq.count; i++) {
-      await updateCallback(seq.frame, seq.caption);
-      await wait(seq.delay);
-    }
-  }
-
-  // Dramatic pause
-  await wait(500);
-  await updateCallback('🎯 *Analyzing result...*', '🎲 Determining winner...');
-  await wait(800);
-
-  // Final result
-  await updateCallback(winningFrame, '🎉 The wheel has landed!');
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 

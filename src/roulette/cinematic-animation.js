@@ -230,34 +230,4 @@ export function createResultAttachment(winningNumber) {
   });
 }
 
-/**
- * Lite mode fallback - text-based animation
- */
-export async function animateLiteMode(updateCallback, winningFrame) {
-  const sequences = [
-    { count: 12, delay: 60, frame: '⚡ 🎰 ⚡ 🎰 ⚡ 🎰 ⚡', caption: '🎡 **Accelerating...** ⚡' },
-    { count: 10, delay: 100, frame: '🎰 💫 🎰 💫 🎰 💫 🎰', caption: '🌀 **Spinning fast...** 💨' },
-    { count: 8, delay: 150, frame: '⭐ 🎯 ⭐ 🎯 ⭐ 🎯 ⭐', caption: '⏳ **Slowing down...** 🌀' },
-    { count: 5, delay: 300, frame: '✨ 🎰 ✨ 🎰 ✨ 🎰 ✨', caption: '💫 **Almost there...** ⏰' },
-  ];
-
-  for (const seq of sequences) {
-    for (let i = 0; i < seq.count; i++) {
-      await updateCallback(seq.frame, seq.caption);
-      await wait(seq.delay);
-    }
-  }
-
-  // Dramatic pause
-  await wait(500);
-  await updateCallback('🎯 **Analyzing result...**', '✨ **The wheel has stopped!** ✨');
-  await wait(800);
-
-  // Final result
-  await updateCallback(winningFrame, '🎉 **STILL GUUHHHD!** 🎰');
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 

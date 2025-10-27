@@ -8,7 +8,7 @@
     "dev": "node src/index.js",
     "build": "tsc -p tsconfig.json && node scripts/generate-runtime-entry.mjs",
     "preflight": "node scripts/validate-roulette-deps.js",
-    "start": "npm run preflight && node dist/src/index.js",
+    "start": "node dist/src/index.js",
     "postinstall": "node -e \"try{require('better-sqlite3');}catch(e){process.exit(0)}\" || npm rebuild better-sqlite3",
     "test": "vitest run --config vitest.config.js",
     "test:watch": "vitest --config vitest.config.js",

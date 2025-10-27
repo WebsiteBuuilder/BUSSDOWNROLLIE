@@ -16,7 +16,7 @@ import {
   isGiveawayButton,
 } from './features/giveaways/router.js';
 import { runStartupValidation } from './utils/startup-validator.js';
-import { getAnimationStatus } from './roulette/safe-animation.js';
+import { validateCinematicAnimation, getAnimationStatus } from './roulette/safe-animation.js';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);
@@ -284,11 +284,18 @@ process.on('unhandledRejection', (reason, promise) => {
     // Run startup validation
     await runStartupValidation();
     
+    // Validate cinematic animation system
+    await validateCinematicAnimation();
+    
     // Check animation status
-    const animStatus = await getAnimationStatus();
+    const animStatus = getAnimationStatus();
     console.log(`🎨 Roulette Animation Mode: ${animStatus.mode}`);
-    if (animStatus.fallback) {
-      console.log('⚠️  Running in fallback mode - cinematic animations disabled');
+    
+    if (!animStatus.available) {
+      console.error('❌ CRITICAL: Cinematic animation is NOT available!');
+      console.error('   Roulette command will be DISABLED');
+      console.error('   Please check Docker build logs for canvas/gifencoder issues');
+      console.error('');
     }
     
     // Initialize bot

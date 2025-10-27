@@ -1,91 +1,96 @@
 /**
- * Safe Animation Wrapper
- * Provides graceful fallback if canvas/gifencoder dependencies fail
+ * Cinematic Animation Enforcer
+ * NO FALLBACK - Cinematic rendering only or throw error
  */
 
-let cinematicAvailable = false;
 let cinematicModule = null;
+let validationAttempted = false;
+let validationPassed = false;
 
 /**
- * Check if cinematic animation is available
+ * Validate cinematic animation is available (once per runtime)
  */
-export async function isCinematicAvailable() {
-  if (cinematicModule !== null) {
-    return cinematicAvailable;
+export async function validateCinematicAnimation() {
+  if (validationAttempted) {
+    return validationPassed;
   }
-
+  
+  validationAttempted = true;
+  
   try {
-    // Test canvas
-    await import('canvas');
+    console.log('🔍 Validating cinematic animation system...');
     
-    // Test gifencoder
-    await import('gifencoder');
+    // Test canvas import
+    const canvas = await import('canvas');
+    if (!canvas.createCanvas) {
+      throw new Error('canvas.createCanvas not available');
+    }
+    
+    // Test gifencoder import
+    const gifencoder = await import('gifencoder');
+    if (!gifencoder.default) {
+      throw new Error('gifencoder.default not available');
+    }
     
     // Load cinematic module
     cinematicModule = await import('./cinematic-animation.js');
-    cinematicAvailable = true;
+    if (!cinematicModule.generateCinematicSpin) {
+      throw new Error('generateCinematicSpin function not found');
+    }
     
-    console.log('✅ Cinematic animation system loaded successfully');
+    // Perform test render to verify everything works
+    console.log('   Testing render capabilities...');
+    const testCanvas = canvas.createCanvas(50, 50);
+    const ctx = testCanvas.getContext('2d');
+    ctx.fillStyle = '#00FF75';
+    ctx.fillRect(0, 0, 50, 50);
+    
+    // Verify context has required methods
+    if (!ctx.fillRect || !ctx.arc || !ctx.fillText) {
+      throw new Error('Canvas context missing required methods');
+    }
+    
+    console.log('✅ Cinematic animation validated successfully');
+    validationPassed = true;
     return true;
   } catch (error) {
-    console.warn('⚠️  Cinematic animation unavailable, using fallback mode');
-    console.warn(`   Reason: ${error.message}`);
-    cinematicAvailable = false;
-    cinematicModule = null;
+    console.error('❌ Cinematic animation validation FAILED');
+    console.error(`   Error: ${error.message}`);
+    if (error.stack) {
+      console.error(`   Stack: ${error.stack}`);
+    }
+    console.error('');
+    console.error('⚠️  Roulette command will be DISABLED');
+    console.error('   Missing dependencies: canvas or gifencoder');
+    console.error('   Please check Docker build logs for system library issues');
+    console.error('');
+    validationPassed = false;
     return false;
   }
 }
 
 /**
- * Safely generate cinematic spin with automatic fallback
+ * Generate cinematic spin - strict mode only (NO FALLBACK)
  */
-export async function safeGenerateCinematicSpin(winningNumber, options = {}) {
-  const available = await isCinematicAvailable();
-  
-  if (!available) {
-    throw new Error('FALLBACK_MODE');
+export async function generateCinematicSpin(winningNumber, options = {}) {
+  if (!validationPassed) {
+    throw new Error('Cinematic animation unavailable. Missing or broken dependencies.');
   }
-
+  
   try {
     return await cinematicModule.generateCinematicSpin(winningNumber, options);
   } catch (error) {
     console.error('❌ Cinematic animation generation failed:', error);
-    throw new Error('FALLBACK_MODE');
+    throw error; // Propagate error, no fallback
   }
 }
 
 /**
- * Safely animate lite mode (always available)
+ * Get animation status
  */
-export async function safeAnimateLiteMode(updateCallback, winningFrame) {
-  try {
-    // Import lite mode animation
-    const { animateLiteMode } = await import('./cinematic-animation.js');
-    await animateLiteMode(updateCallback, winningFrame);
-  } catch (error) {
-    console.error('❌ Lite mode animation failed, using ultra-safe fallback:', error);
-    
-    // Ultra-safe fallback: simple text animation
-    const frames = ['🎰 ⚡', '⚡ 🎰', '🎰 💫', '💫 🎰', '🎰 ✨', '✨ 🎰'];
-    for (let i = 0; i < 20; i++) {
-      const frame = frames[i % frames.length];
-      await updateCallback(frame, '🎡 Spinning...');
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    await updateCallback(winningFrame, '🎉 Result!');
-  }
-}
-
-/**
- * Get animation status for logging
- */
-export async function getAnimationStatus() {
-  const available = await isCinematicAvailable();
+export function getAnimationStatus() {
   return {
-    cinematic: available,
-    fallback: !available,
-    mode: available ? 'CINEMATIC_3D' : 'LITE_TEXT'
+    available: validationPassed,
+    mode: validationPassed ? 'CINEMATIC_3D' : 'DISABLED'
   };
 }
-

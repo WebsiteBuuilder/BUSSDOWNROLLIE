@@ -11,9 +11,9 @@ import {
 } from './simple-ui.js';
 import { createDetailedRulesEmbed } from './lobby-ui.js';
 import { 
-  safeGenerateCinematicSpin, 
-  safeAnimateLiteMode,
-  isCinematicAvailable 
+  generateCinematicSpin, 
+  validateCinematicAnimation,
+  getAnimationStatus 
 } from './safe-animation.js';
 import { AttachmentBuilder } from 'discord.js';
 import { safeReply, ackWithin3s } from '../utils/interaction.js';
@@ -22,7 +22,6 @@ import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
 
 const ACTIVE_ROULETTE = new Map();
-const USE_CINEMATIC_ANIMATION = true; // Toggle between cinematic and lite mode
 
 const PAYOUTS = {
   'red': 2,
@@ -270,63 +269,52 @@ async function spinWheel(interaction, state, commandId) {
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
-  // Animate the wheel with safe cinematic effects
-  if (USE_CINEMATIC_ANIMATION) {
-    try {
-      console.log(`🎬 Attempting cinematic spin animation...`);
-      
-      const gifBuffer = await safeGenerateCinematicSpin(pocket.number, {
-        duration: 4000,
-        fps: 30,
-        quality: 10
-      });
-      
-      const attachment = new AttachmentBuilder(gifBuffer, { 
-        name: 'roulette-spin.gif',
-        description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
-      });
+  // Animate the wheel with cinematic effects (NO FALLBACK)
+  try {
+    console.log(`🎬 Generating cinematic spin animation...`);
+    
+    const gifBuffer = await generateCinematicSpin(pocket.number, {
+      duration: 4000,
+      fps: 30,
+      quality: 10
+    });
+    
+    const attachment = new AttachmentBuilder(gifBuffer, { 
+      name: 'roulette-spin.gif',
+      description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
+    });
 
-      // Show cinematic spinning animation
-      await interaction.editReply({
-        embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
-        files: [attachment],
-        components: []
-      });
+    await interaction.editReply({
+      embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
+      files: [attachment],
+      components: []
+    });
 
-      // Wait for animation to complete
-      await new Promise(resolve => setTimeout(resolve, 4000));
-      
-      console.log('✅ Cinematic animation completed successfully');
-      
-    } catch (cinematicError) {
-      if (cinematicError.message === 'FALLBACK_MODE') {
-        console.warn('⚠️  Cinematic mode unavailable, using lite mode fallback');
-      } else {
-        console.error('❌ Cinematic animation error:', cinematicError.message);
-      }
-      
-      // Safe fallback to lite mode
-      await safeAnimateLiteMode(
-        async (frame, caption) => {
-          await interaction.editReply({
-            embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
-            components: [],
-          });
-        },
-        `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`
-      );
+    await new Promise(resolve => setTimeout(resolve, 4000));
+    console.log('✅ Cinematic animation completed successfully');
+    
+  } catch (cinematicError) {
+    console.error('❌ CRITICAL: Cinematic animation failed');
+    console.error(`   Error: ${cinematicError.message}`);
+    console.error(`   Stack: ${cinematicError.stack}`);
+    
+    // Return VP to user and show error
+    if (state.totalBet > 0) {
+      await addVP(state.userId, state.totalBet);
+      console.log(`💰 Refunded ${state.totalBet} VP to user ${state.userId}`);
     }
-  } else {
-    // Use safe lite mode animation
-    await safeAnimateLiteMode(
-      async (frame, caption) => {
-        await interaction.editReply({
-          embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
-          components: [],
-        });
-      },
-      `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`
-    );
+    ACTIVE_ROULETTE.delete(commandId);
+    
+    await interaction.editReply({
+      content: '❌ **Roulette Animation System Error**\n\n' +
+               'The cinematic wheel renderer encountered a critical error and could not display the animation.\n\n' +
+               `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
+               '⚠️ This is a system issue. Please contact an administrator if this persists.',
+      embeds: [],
+      components: []
+    });
+    
+    return; // Exit early, don't show results
   }
 
   // Calculate winnings
