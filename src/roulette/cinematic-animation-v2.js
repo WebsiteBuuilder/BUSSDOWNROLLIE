@@ -267,21 +267,27 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     const winningIndex = ROULETTE_NUMBERS.findIndex((s) => s.num === winningNumber);
     const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
     
-    // Add random offset so ball doesn't always land at exact same spot
-    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.8; // Random position within 80% of segment
-    const targetAngle = -(winningIndex * segmentAngle) + Math.PI / 2 + randomOffset;
+    // FIXED BALL POSITION: Ball always settles at TOP of wheel (12 o'clock) in canvas space
+    const BALL_LANDING_POSITION = -Math.PI / 2; // Top of canvas (pointing up)
     
-    // Add random extra rotations (12-16 instead of fixed 14)
+    // Add random offset within winning segment
+    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.6; // Random within 60% of segment
+    
+    // Calculate wheel rotation needed to put winning segment under the ball landing position
+    // Segments are drawn starting at angle 0 in wheel space
+    // We need: wheelRotation + (winningIndex * segmentAngle) = BALL_LANDING_POSITION
+    // So: wheelRotation = BALL_LANDING_POSITION - (winningIndex * segmentAngle) + randomOffset
+    const baseTargetAngle = BALL_LANDING_POSITION - (winningIndex * segmentAngle) + randomOffset;
+    
+    // Add random extra rotations (12-16 full spins)
     const randomSpins = 12 + Math.random() * 4;
+    const finalWheelRotation = (Math.PI * 2 * randomSpins) + baseTargetAngle;
     
-    // Final ball position in canvas coordinates (where winning segment ends up)
-    const finalBallAngleCanvas = Math.PI / 2 + randomOffset; // Top position with random offset
+    // Ball radius
+    const finalBallRadius = Math.min(width, height) * 0.38;
+    const maxBallRadius = Math.min(width, height) * 0.42;
 
     let lastLogTime = Date.now();
-
-    // Pre-calculate final positions for consistency
-    const finalWheelRotation = (Math.PI * 2 * randomSpins) + targetAngle;
-    const finalBallRadius = Math.min(width, height) * 0.38;
     
     for (let frame = 0; frame < totalFrames; frame++) {
       try {
@@ -296,41 +302,49 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
         let wheelRotation, ballAngle, ballRadius;
         
         if (isSpinning) {
-          // Fast spinning phase - smooth deceleration
+          // SPINNING PHASE: Wheel and ball both spin
           const spinProgress = progress / spinDuration;
           const easedProgress = easeOutQuartic(spinProgress);
           
-          // Wheel rotates to final position
+          // Wheel gradually reaches final rotation
           wheelRotation = easedProgress * finalWheelRotation;
           
-          // Ball spins independently (opposite direction, faster initially)
-          const ballRotations = 18 - (easedProgress * 15); // Starts at 18, ends at 3 rotations
-          ballAngle = progress * Math.PI * 2 * ballRotations;
+          // Ball spins in opposite direction (clockwise while wheel goes counter-clockwise)
+          // Ball makes many rotations initially, slowing down
+          const initialBallSpeed = 25; // Fast initial rotation
+          const finalBallSpeed = 2;    // Slow final rotation
+          const currentBallSpeed = initialBallSpeed - (initialBallSpeed - finalBallSpeed) * easedProgress;
+          ballAngle = -progress * Math.PI * 2 * currentBallSpeed; // Negative = opposite direction
           
-          // Ball spirals inward
-          const maxRadius = Math.min(width, height) * 0.42;
-          ballRadius = maxRadius - easedProgress * (maxRadius - finalBallRadius);
+          // Ball spirals inward from outer track to landing position
+          ballRadius = maxBallRadius - easedProgress * (maxBallRadius - finalBallRadius);
           
         } else if (isSlowingDown) {
-          // Slowdown phase - ball settles onto winning number
+          // SLOWDOWN PHASE: Wheel stops, ball settles to landing position
           const slowdownProgress = (progress - spinDuration) / slowdownDuration;
           const easeSlowdown = easeOutCubic(slowdownProgress);
           
-          // Wheel is at final position
+          // Wheel is now at final position (stopped)
           wheelRotation = finalWheelRotation;
           
-          // Ball smoothly moves to final position (top of wheel, on winning segment)
-          const spinEndBallRotations = 3;
-          const startBallAngle = spinDuration * Math.PI * 2 * spinEndBallRotations;
+          // Calculate where ball was at end of spin phase
+          const spinEndSpeed = 2;
+          const ballAngleAtSpinEnd = -spinDuration * Math.PI * 2 * spinEndSpeed;
           
-          // Smoothly transition to final ball position in canvas space
-          ballAngle = startBallAngle + (finalBallAngleCanvas - startBallAngle) * easeSlowdown;
+          // Ball smoothly moves from its spin-end position to the landing position
+          // We need to find shortest angular path
+          let angleDiff = BALL_LANDING_POSITION - ballAngleAtSpinEnd;
+          // Normalize to [-π, π]
+          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+          
+          ballAngle = ballAngleAtSpinEnd + (angleDiff * easeSlowdown);
           ballRadius = finalBallRadius;
           
         } else {
-          // Resting or result - completely still, ball ON the winning number
+          // RESTING PHASE: Everything stopped, ball sitting on winning number
           wheelRotation = finalWheelRotation;
-          ballAngle = finalBallAngleCanvas; // Ball at top, on winning segment
+          ballAngle = BALL_LANDING_POSITION; // Ball at fixed top position
           ballRadius = finalBallRadius;
         }
         
