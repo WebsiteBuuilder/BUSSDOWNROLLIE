@@ -87,7 +87,6 @@ export const data = new SlashCommandBuilder()
           .setDescription('Percentage points to adjust (e.g., 5 for 5%)')
           .setRequired(true)
           .setMinValue(-100)
-          .setMaxValue(100)
       )
   )
   .addSubcommand((subcommand) =>
@@ -504,7 +503,7 @@ async function handleDailyChance(interaction) {
       desiredModifier = adjustment;
     }
 
-    const clampedModifier = Math.max(-1, Math.min(1, desiredModifier));
+    const clampedModifier = Math.max(-1, desiredModifier);
     const appliedChange = clampedModifier - currentModifier;
 
     await prisma.user.update({
@@ -515,8 +514,8 @@ async function handleDailyChance(interaction) {
     const baseChanceStr = await getConfig('daily_rng_chance', '0.10');
     const parsedBaseChance = parseFloat(baseChanceStr);
     const baseChance = Number.isFinite(parsedBaseChance) ? parsedBaseChance : 0.1;
-    const previousChance = Math.min(Math.max(baseChance + currentModifier, 0), 1);
-    const finalChance = Math.min(Math.max(baseChance + clampedModifier, 0), 1);
+    const previousChance = Math.max(baseChance + currentModifier, 0);
+    const finalChance = Math.max(baseChance + clampedModifier, 0);
 
     const embed = new EmbedBuilder()
       .setColor(appliedChange > 0 ? 0x00ff00 : appliedChange < 0 ? 0xff9900 : 0x5865f2)
@@ -549,7 +548,7 @@ async function handleDailyChance(interaction) {
 
     const descriptionParts = [`Base odds are ${(baseChance * 100).toFixed(2)}%.`];
     if (desiredModifier !== clampedModifier) {
-      descriptionParts.push('⚠️ Change was clamped between -100% and +100%.');
+      descriptionParts.push('⚠️ Change was clamped to prevent negative modifiers.');
     }
 
     embed.setDescription(descriptionParts.join('\n'));

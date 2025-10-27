@@ -43,7 +43,7 @@ export async function execute(interaction) {
     const parsedBaseChance = parseFloat(chanceStr);
     const baseChance = Number.isFinite(parsedBaseChance) ? parsedBaseChance : 0.1;
     const modifier = Number.isFinite(user.dailyChanceModifier) ? user.dailyChanceModifier : 0;
-    const finalChance = Math.min(Math.max(baseChance + modifier, 0), 1);
+    const finalChance = Math.max(baseChance + modifier, 0);
 
     // Roll RNG
     const roll = Math.random();
