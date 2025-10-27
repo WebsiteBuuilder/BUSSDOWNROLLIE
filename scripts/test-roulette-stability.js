@@ -26,16 +26,18 @@ async function testSpin(testNumber, winningNumber) {
   
   // Try cinematic GIF
   try {
-    const result = await generateCinematicSpin(winningNumber, {
+    const job = await generateCinematicSpin(winningNumber, {
       duration: 3500,
       fps: 20,
       quality: 15
     });
-    
+
+    const result = await job.final;
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-    
+
     if (result && result.buffer && result.metadata) {
       console.log(`${COLORS.GREEN}✅ PASS: Cinematic GIF generated successfully${COLORS.RESET}`);
+      console.log(`   Preview: ${(job.preview.buffer.length / 1024).toFixed(1)}KB`);
       console.log(`   Size: ${result.metadata.sizeMB}MB (${result.metadata.sizeKB}KB)`);
       console.log(`   Frames: ${result.metadata.frames}`);
       console.log(`   Encode Time: ${result.metadata.encodeTimeSeconds}s`);

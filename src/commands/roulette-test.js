@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { generateCinematicSpin } from '../roulette/cinematic-animation.js';
 import { safeReply } from '../utils/interaction.js';
 
@@ -69,12 +69,24 @@ export async function execute(interaction) {
     console.log(`🧪 [BENCHMARK] Starting test for number ${testNumber} (${fps}fps, Q${quality})`);
     const benchmarkStart = Date.now();
 
-    const result = await generateCinematicSpin(testNumber, {
+    const job = await generateCinematicSpin(testNumber, {
       duration: 3500,
       fps,
       quality
     });
 
+    const previewAttachment = new AttachmentBuilder(job.preview.buffer, {
+      name: 'roulette-preview.png',
+      description: `Preview frame for number ${testNumber}`
+    });
+
+    statusEmbed
+      .setDescription('🖼️ **Preview ready!** Encoding cinematic spin...')
+      .setImage('attachment://roulette-preview.png');
+
+    await interaction.editReply({ embeds: [statusEmbed], files: [previewAttachment] });
+
+    const result = await job.final;
     const totalTime = ((Date.now() - benchmarkStart) / 1000).toFixed(2);
     const metadata = result.metadata;
 
@@ -101,12 +113,17 @@ export async function execute(interaction) {
       status = '❌ TOO LARGE';
     }
 
+    const finalAttachment = new AttachmentBuilder(result.buffer, {
+      name: 'roulette-spin.gif',
+      description: `STILL GUUHHHD Roulette - Number ${metadata.winningNumber}`
+    });
+
     const resultEmbed = new EmbedBuilder()
       .setColor(metadata.sizeMB < 3 ? 0x00FF75 : 0xf04747)
       .setTitle('🎬 Roulette Animation Benchmark Results')
       .setDescription(`${rating}\n**Performance:** ${status}`)
       .addFields(
-        { 
+        {
           name: '📊 Generation Stats',
           value: `**Encode Time:** ${metadata.encodeTimeSeconds}s\n` +
                  `**Total Time:** ${totalTime}s\n` +
@@ -137,12 +154,14 @@ export async function execute(interaction) {
           inline: false
         }
       )
-      .setFooter({ 
-        text: metadata.sizeMB < 3 
-          ? '✅ File size is within Discord 3MB limit' 
-          : '❌ File size EXCEEDS Discord 3MB limit!' 
+      .setFooter({
+        text: metadata.sizeMB < 3
+          ? '✅ File size is within Discord 3MB limit'
+          : '❌ File size EXCEEDS Discord 3MB limit!'
       })
       .setTimestamp();
+
+    resultEmbed.setImage('attachment://roulette-spin.gif');
 
     // Recommendations
     let recommendations = [];
@@ -165,7 +184,7 @@ export async function execute(interaction) {
       });
     }
 
-    await interaction.editReply({ embeds: [resultEmbed] });
+    await interaction.editReply({ embeds: [resultEmbed], files: [finalAttachment] });
 
     console.log(`✅ [BENCHMARK] Test complete: ${metadata.sizeMB}MB, ${metadata.encodeTimeSeconds}s, ${metadata.frames} frames`);
 

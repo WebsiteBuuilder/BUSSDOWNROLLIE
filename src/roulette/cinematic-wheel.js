@@ -31,7 +31,7 @@ const COLORS = {
 };
 
 // Perspective constants
-const PERSPECTIVE_FACTOR = 0.6; // Ellipse height compression (3D tilt)
+export const PERSPECTIVE_FACTOR = 0.6; // Ellipse height compression (3D tilt)
 const DEPTH_SCALE = 0.15; // Size variation by depth
 
 /**
@@ -390,7 +390,7 @@ export function drawWinningHighlight(ctx, centerX, centerY, radius, winningNumbe
   const pocketIndex = WHEEL_ORDER.indexOf(winningNumber);
   const anglePerPocket = (Math.PI * 2) / WHEEL_ORDER.length;
   const winningAngle = pocketIndex * anglePerPocket - Math.PI / 2;
-  
+
   const pulse = Math.sin(progress * Math.PI * 4) * 0.3 + 0.7;
   
   ctx.save();
@@ -410,6 +410,53 @@ export function drawWinningHighlight(ctx, centerX, centerY, radius, winningNumbe
   );
   ctx.stroke();
   ctx.restore();
+}
+
+/**
+ * Pre-compute reusable wheel textures for a given resolution
+ */
+export function createWheelTextures(width = 600, height = 600) {
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const scaleFactor = width / 800;
+  const outerRadius = 350 * scaleFactor;
+  const innerRadius = 100 * scaleFactor;
+
+  const background = createCanvas(width, height);
+  const backgroundCtx = background.getContext('2d');
+  drawBackground(backgroundCtx, width, height);
+  drawDepthShadow(backgroundCtx, centerX, centerY, outerRadius);
+
+  const wheel = createCanvas(width, height);
+  const wheelCtx = wheel.getContext('2d');
+  drawWheelSegments(wheelCtx, centerX, centerY, outerRadius, innerRadius, 0, null, height);
+  drawNumbers(wheelCtx, centerX, centerY, outerRadius, innerRadius, 0, null, width, height);
+  drawOuterBorder(wheelCtx, centerX, centerY, outerRadius + 10);
+
+  const branding = createCanvas(width, height);
+  const brandingCtx = branding.getContext('2d');
+  drawBrandingRing(brandingCtx, centerX, centerY, outerRadius + 40, 0, width);
+
+  const centerHub = createCanvas(width, height);
+  const centerCtx = centerHub.getContext('2d');
+  drawCenterHub(centerCtx, centerX, centerY, innerRadius);
+
+  return {
+    background,
+    wheel,
+    branding,
+    centerHub,
+    meta: {
+      width,
+      height,
+      centerX,
+      centerY,
+      outerRadius,
+      innerRadius,
+      scaleFactor,
+      perspective: PERSPECTIVE_FACTOR
+    }
+  };
 }
 
 /**
