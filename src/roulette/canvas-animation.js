@@ -1,11 +1,49 @@
-import GIFEncoder from 'gifencoder';
 import { AttachmentBuilder } from 'discord.js';
 import {
   renderSpinningWheel,
   renderResultWheel,
   calculateBallPhysics,
-  getPocketIndex
+  getPocketIndex,
+  isCanvasModuleAvailable
 } from './canvas-wheel.js';
+
+let GIFEncoderCtor = null;
+let gifEncoderError = null;
+
+try {
+  const gifModule = await import('gifencoder');
+  GIFEncoderCtor = gifModule.default ?? gifModule;
+  if (typeof GIFEncoderCtor !== 'function') {
+    GIFEncoderCtor = null;
+    gifEncoderError = new Error('gifencoder module does not export a constructor');
+  }
+} catch (error) {
+  gifEncoderError = error;
+  console.warn(
+    '⚠️ GIFEncoder dependency not available; roulette animations will fall back to lite mode.',
+    error?.message ?? error
+  );
+}
+
+function assertCanvasAnimationAvailable(action) {
+  if (!isCanvasAnimationAvailable()) {
+    const error = new Error('Canvas animation is not available to ' + action + '.');
+    if (gifEncoderError) {
+      error.cause = gifEncoderError;
+    }
+    throw error;
+  }
+}
+
+function assertCanvasAvailable(action) {
+  if (!isCanvasModuleAvailable()) {
+    throw new Error('Canvas module is not available to ' + action + '.');
+  }
+}
+
+export function isCanvasAnimationAvailable() {
+  return isCanvasModuleAvailable() && typeof GIFEncoderCtor === 'function';
+}
 
 /**
  * Canvas-based Roulette Animation System
@@ -19,12 +57,13 @@ import {
  * @returns {Promise<Buffer>} GIF buffer
  */
 export async function generateWheelGIF(winningNumber, duration = 8000) {
+  assertCanvasAnimationAvailable('generate roulette GIFs');
   const fps = 15; // 15 frames per second for smooth animation
   const totalFrames = Math.floor((duration / 1000) * fps);
   const targetPocket = getPocketIndex(winningNumber);
-  
+
   // Initialize GIF encoder
-  const encoder = new GIFEncoder(800, 800);
+  const encoder = new GIFEncoderCtor(800, 800);
   encoder.start();
   encoder.setRepeat(-1); // Loop indefinitely
   encoder.setDelay(1000 / fps); // Frame delay in ms
@@ -66,6 +105,7 @@ export async function generateWheelGIF(winningNumber, duration = 8000) {
  * @returns {Buffer} PNG buffer
  */
 export function generateResultImage(winningNumber) {
+  assertCanvasAvailable('render roulette result images');
   const canvas = renderResultWheel(winningNumber);
   return canvas.toBuffer('image/png');
 }
@@ -87,6 +127,7 @@ export async function createSpinAnimation(winningNumber, duration = 8000) {
  * @returns {AttachmentBuilder} Discord attachment
  */
 export function createResultImage(winningNumber) {
+  assertCanvasAvailable('render roulette result images');
   const pngBuffer = generateResultImage(winningNumber);
   return new AttachmentBuilder(pngBuffer, { name: 'roulette-result.png' });
 }
@@ -99,6 +140,7 @@ export function createResultImage(winningNumber) {
  * @param {number} duration - Animation duration in milliseconds
  */
 export async function animateRouletteWithUpdates(updateCallback, winningNumber, duration = 8000) {
+  assertCanvasAvailable('animate the roulette wheel');
   const fps = 15;
   const totalFrames = Math.floor((duration / 1000) * fps);
   const targetPocket = getPocketIndex(winningNumber);

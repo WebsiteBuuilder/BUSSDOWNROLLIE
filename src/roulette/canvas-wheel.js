@@ -1,4 +1,36 @@
-import { createCanvas } from 'canvas';
+let createCanvasFn = null;
+let canvasModuleError = null;
+
+try {
+  const canvasModule = await import('canvas');
+  createCanvasFn = canvasModule.createCanvas ?? canvasModule.default?.createCanvas ?? null;
+  if (typeof createCanvasFn !== 'function') {
+    createCanvasFn = null;
+    canvasModuleError = new Error('Canvas module does not expose createCanvas');
+  }
+} catch (error) {
+  canvasModuleError = error;
+  console.warn(
+    '⚠️ Canvas dependency not available; roulette wheel rendering will fall back to lite mode.',
+    error?.message ?? error
+  );
+}
+
+function ensureCanvas(action = 'render roulette graphics') {
+  if (!createCanvasFn) {
+    const error = new Error('Canvas module is not available to ' + action + '.');
+    if (canvasModuleError) {
+      error.cause = canvasModuleError;
+    }
+    throw error;
+  }
+
+  return createCanvasFn;
+}
+
+export function isCanvasModuleAvailable() {
+  return Boolean(createCanvasFn);
+}
 
 /**
  * European Roulette Wheel Renderer using Canvas
@@ -42,6 +74,7 @@ function getNumberColor(num) {
  */
 export function renderStaticWheel(winningNumber = null, rotation = 0) {
   const size = 800;
+  const createCanvas = ensureCanvas('render the roulette wheel');
   const canvas = createCanvas(size, size);
   const ctx = canvas.getContext('2d');
   const centerX = size / 2;
