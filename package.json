@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "build": "tsc -p tsconfig.json && node scripts/generate-runtime-entry.mjs",
+    "prebuild": "node scripts/prebuild-validate.js",
     "preflight": "node scripts/validate-roulette-deps.js",
     "start": "node dist/src/index.js",
     "postinstall": "node -e \"try{require('better-sqlite3');}catch(e){process.exit(0)}\" || npm rebuild better-sqlite3",
@@ -26,7 +27,7 @@
   "author": "GUHD EATS",
   "license": "MIT",
   "dependencies": {
-    "@prisma/client": "^6.17.1",
+    "@prisma/client": "^5.17.0",
     "better-sqlite3": "^9.6.0",
     "canvas": "^2.11.2",
     "discord.js": "^14.14.1",
@@ -35,7 +36,7 @@
     "tslib": "^2.6.2"
   },
   "devDependencies": {
-    "prisma": "^6.17.1",
+    "prisma": "^5.17.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vitest": "^1.1.0"
