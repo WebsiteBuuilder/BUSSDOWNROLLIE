@@ -295,16 +295,16 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   }
 
   const {
-    width = 500,      // Optimized for <3MB
-    height = 500,
+    width = 450,      // Aggressively optimized for <3MB
+    height = 450,
     duration = 9000,  // 9 seconds
-    fps = 25,         // 25 FPS (optimal for file size)
-    quality = 18      // Optimized quality/size balance
+    fps = 20,         // 20 FPS (180 total frames for smaller size)
+    quality = 20      // Higher number = faster encode, smaller file
   } = options;
 
   const totalFrames = Math.floor((duration / 1000) * fps);
   
-  console.log(`🎬 [V2 CASINO] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
+  console.log(`🎬 [V2 CASINO OPTIMIZED] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
 
   try {
     const canvas = createCanvas(width, height);
