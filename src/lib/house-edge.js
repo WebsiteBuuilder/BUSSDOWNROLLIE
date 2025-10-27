@@ -87,6 +87,7 @@ export function getRoulettePocket({
 
   const penalties = [];
 
+  // Enhanced anti-exploitation measures
   if (betAmount >= roulette.progressiveThreshold) {
     const increments = Math.floor(betAmount / roulette.progressiveThreshold);
     penalties.push(roulette.progressiveIncrement * increments);
@@ -99,6 +100,16 @@ export function getRoulettePocket({
   if (streakInfo.wins >= 5) {
     const streakFactor = streakInfo.wins - 4;
     penalties.push(roulette.streakAdjustment * streakFactor);
+  }
+
+  // Additional penalty for consecutive wins on color bets (red/black)
+  if (streakInfo.wins >= 3 && (targetColor === 'red' || targetColor === 'black')) {
+    penalties.push(0.01 * (streakInfo.wins - 2)); // Increasing penalty for color betting streaks
+  }
+
+  // Enhanced penalty for high-value color bets
+  if (targetColor && betAmount >= 100) {
+    penalties.push(0.005); // Additional 0.5% penalty for high-value color bets
   }
 
   const totalPenalty = clamp(penalties.reduce((acc, value) => acc + value, roulette.baseEdge - vipReduction), 0, 0.5);
@@ -117,6 +128,7 @@ export function getRoulettePocket({
     return clamp(weight * modifier, weight * 0.05, weight * 1.5);
   });
 
+  // Force losing outcome for excessive streaks
   if (streakInfo.wins >= roulette.maxConsecutiveWins) {
     const losingOptions = EUROPEAN_WHEEL.filter((pocket) => {
       if (targetColor && pocket.color === targetColor) return false;
@@ -126,6 +138,17 @@ export function getRoulettePocket({
 
     if (losingOptions.length > 0) {
       return losingOptions[crypto.randomInt(losingOptions.length)];
+    }
+  }
+
+  // Additional safeguard: Force losing outcome for suspicious patterns
+  if (streakInfo.wins >= 5 && (targetColor === 'red' || targetColor === 'black')) {
+    // 20% chance to force a losing outcome for color betting streaks
+    if (crypto.randomInt(0, 100) < 20) {
+      const losingOptions = EUROPEAN_WHEEL.filter((pocket) => pocket.color !== targetColor);
+      if (losingOptions.length > 0) {
+        return losingOptions[crypto.randomInt(losingOptions.length)];
+      }
     }
   }
 
