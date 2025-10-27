@@ -123,7 +123,7 @@ function drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angl
     const innerY1 = Math.sin(startAngle) * innerRadius;
     const innerY2 = Math.sin(endAngle) * innerRadius;
     
-    const scale = getDepthScale(centerY + outerY1, 800);
+    const scale = getDepthScale(centerY + outerY1, height);
     
     // Draw pocket with perspective
     ctx.beginPath();
@@ -183,7 +183,7 @@ function drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, win
     const textX = Math.cos(midAngle) * textRadius;
     const textY = Math.sin(midAngle) * textRadius * PERSPECTIVE_FACTOR;
     
-    const scale = getDepthScale(centerY + textY, 800);
+    const scale = getDepthScale(centerY + textY, height);
     
     ctx.save();
     ctx.translate(textX, textY);
@@ -191,7 +191,9 @@ function drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, win
     ctx.scale(scale, scale);
     
     ctx.fillStyle = COLORS.white;
-    ctx.font = 'bold 20px Arial';
+    // Scale font size to canvas
+    const fontSize = Math.floor(20 * (width / 800));
+    ctx.font = `bold ${fontSize}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -268,31 +270,34 @@ function drawCenterHub(ctx, centerX, centerY, radius) {
   ctx.shadowBlur = 20;
   ctx.stroke();
   
-  // GUHD EATS text
+  // GUHD EATS text (scaled to canvas size)
   ctx.shadowBlur = 30;
   ctx.fillStyle = COLORS.gold;
-  ctx.font = 'bold 32px Arial';
+  const scaleFactor = radius / 100; // Based on hub radius
+  ctx.font = `bold ${Math.floor(32 * scaleFactor)}px Arial`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('GUHD', centerX, centerY - 18);
+  ctx.fillText('GUHD', centerX, centerY - 18 * scaleFactor);
   
-  ctx.font = 'bold 22px Arial';
-  ctx.fillText('EATS', centerX, centerY + 15);
+  ctx.font = `bold ${Math.floor(22 * scaleFactor)}px Arial`;
+  ctx.fillText('EATS', centerX, centerY + 15 * scaleFactor);
   
   ctx.restore();
 }
 
 /**
- * Draw rotating "STILL GUUHHHD" branding ring
+ * Draw rotating "STILL GUUHHHD" branding ring (scaled)
  */
-export function drawBrandingRing(ctx, centerX, centerY, radius, angle) {
+export function drawBrandingRing(ctx, centerX, centerY, radius, angle, canvasWidth = 600) {
   const text = 'STILL GUUHHHD 🎰 ';
   const repeats = 6;
   const totalChars = text.length * repeats;
   const anglePerChar = (Math.PI * 2) / totalChars;
   
   ctx.save();
-  ctx.font = 'bold 18px Arial';
+  // Scale font size based on canvas
+  const fontSize = Math.floor(18 * (canvasWidth / 800));
+  ctx.font = `bold ${fontSize}px Arial`;
   ctx.fillStyle = COLORS.gold;
   ctx.shadowColor = COLORS.glowGold;
   ctx.shadowBlur = 15;
@@ -408,12 +413,12 @@ export function drawWinningHighlight(ctx, centerX, centerY, radius, winningNumbe
 }
 
 /**
- * Render complete cinematic frame
+ * Render complete cinematic frame (OPTIMIZED for 600x600)
  */
 export function renderCinematicFrame(options = {}) {
   const {
-    width = 800,
-    height = 800,
+    width = 600,
+    height = 600,
     angle = 0,
     speed = 0,
     winningNumber = null,
@@ -430,8 +435,10 @@ export function renderCinematicFrame(options = {}) {
   
   const centerX = width / 2;
   const centerY = height / 2;
-  const outerRadius = 350;
-  const innerRadius = 100;
+  // Scale radii proportionally to canvas size
+  const scaleFactor = width / 800;
+  const outerRadius = 350 * scaleFactor;
+  const innerRadius = 100 * scaleFactor;
   
   // Draw layers
   drawBackground(ctx, width, height);
@@ -445,7 +452,7 @@ export function renderCinematicFrame(options = {}) {
   }
   
   if (showBranding) {
-    drawBrandingRing(ctx, centerX, centerY, outerRadius + 40, angle * 0.5);
+    drawBrandingRing(ctx, centerX, centerY, outerRadius + 40, angle * 0.5, width);
   }
   
   drawCenterHub(ctx, centerX, centerY, innerRadius);

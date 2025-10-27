@@ -276,15 +276,25 @@ async function spinWheel(interaction, state, commandId) {
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
-  // Animate the wheel with cinematic effects (NO FALLBACK)
+  // Animate the wheel with cinematic effects (WITH INTELLIGENT FALLBACK)
+  let animationSuccess = false;
+  let animationMetadata = null;
+  
   try {
-    console.log(`🎬 Generating cinematic spin animation...`);
+    console.log(`🎬 [OPTIMIZED] Generating cinematic spin animation...`);
+    const startGen = Date.now();
     
-    const gifBuffer = await generateCinematicSpin(pocket.number, {
-      duration: 4000,
-      fps: 30,
-      quality: 10
+    const result = await generateCinematicSpin(pocket.number, {
+      duration: 3500,
+      fps: 20,
+      quality: 15
     });
+    
+    const gifBuffer = result.buffer;
+    animationMetadata = result.metadata;
+    
+    const genTime = ((Date.now() - startGen) / 1000).toFixed(2);
+    console.log(`⚡ Generation complete in ${genTime}s - Size: ${animationMetadata.sizeMB}MB`);
     
     const attachment = new AttachmentBuilder(gifBuffer, { 
       name: 'roulette-spin.gif',
@@ -297,32 +307,82 @@ async function spinWheel(interaction, state, commandId) {
       components: []
     });
 
-    // Wait for GIF to play
-    await new Promise(resolve => setTimeout(resolve, 4000));
-    console.log('✅ Cinematic animation completed successfully');
+    // Wait for animation to play (use actual duration)
+    const playDuration = animationMetadata.duration || 3500;
+    await new Promise(resolve => setTimeout(resolve, playDuration));
+    
+    console.log(`✅ Cinematic animation completed | ${animationMetadata.frames} frames | ${animationMetadata.sizeMB}MB | ${animationMetadata.encodeTimeSeconds}s`);
+    animationSuccess = true;
     
   } catch (cinematicError) {
-    console.error('❌ CRITICAL: Cinematic animation failed');
+    console.error('❌ Cinematic animation failed - attempting STATIC FALLBACK');
     console.error(`   Error: ${cinematicError.message}`);
-    console.error(`   Stack: ${cinematicError.stack}`);
     
-    // Return VP to user and show error
-    if (state.totalBet > 0) {
-      await addVP(state.userId, state.totalBet);
-      console.log(`💰 Refunded ${state.totalBet} VP to user ${state.userId}`);
+    // FALLBACK: Generate static result PNG instead
+    try {
+      const { createCanvas } = await import('canvas');
+      const { renderCinematicFrame, getWheelOrder } = await import('./cinematic-wheel.js');
+      
+      // Calculate winning angle
+      const wheelOrder = getWheelOrder();
+      const pocketIndex = wheelOrder.indexOf(pocket.number);
+      const anglePerPocket = (Math.PI * 2) / wheelOrder.length;
+      const winningAngle = -(pocketIndex * anglePerPocket) + (Math.PI / 2);
+      
+      // Render static frame showing result
+      const staticCanvas = renderCinematicFrame({
+        width: 600,
+        height: 600,
+        angle: winningAngle,
+        speed: 0,
+        winningNumber: pocket.number,
+        showBranding: true,
+        showLighting: false,
+        showConfetti: true,
+        confettiProgress: 0.6,
+        showWinningHighlight: true,
+        highlightProgress: 1
+      });
+      
+      const pngBuffer = staticCanvas.toBuffer('image/png');
+      const attachment = new AttachmentBuilder(pngBuffer, { 
+        name: 'roulette-result.png',
+        description: `Roulette Result - Number ${pocket.number}`
+      });
+      
+      await spinMessage.edit({
+        content: `🎡 **Spinning the wheel...**\n\n_Animation unavailable - showing static result_`,
+        embeds: [],
+        files: [attachment],
+        components: []
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('✅ Static fallback displayed successfully');
+      animationSuccess = true;
+      
+    } catch (fallbackError) {
+      console.error('❌ CRITICAL: Both animation AND fallback failed');
+      console.error(`   Fallback Error: ${fallbackError.message}`);
+      
+      // Last resort: Refund and show error
+      if (state.totalBet > 0) {
+        await addVP(state.userId, state.totalBet);
+        console.log(`💰 Refunded ${state.totalBet} VP to user ${state.userId}`);
+      }
+      
+      await spinMessage.edit({
+        content: '❌ **Roulette Animation System Error**\n\n' +
+                 'The wheel renderer encountered a critical error.\n\n' +
+                 `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
+                 '⚠️ This is a system issue. Please contact an administrator.',
+        embeds: [],
+        components: []
+      });
+      
+      return; // Exit early, don't show results
     }
-    ACTIVE_ROULETTE.delete(commandId);
-    
-    await spinMessage.edit({
-      content: '❌ **Roulette Animation System Error**\n\n' +
-               'The cinematic wheel renderer encountered a critical error and could not display the animation.\n\n' +
-               `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
-               '⚠️ This is a system issue. Please contact an administrator if this persists.',
-      embeds: [],
-      components: []
-    });
-    
-    return; // Exit early, don't show results
   }
 
   // Calculate winnings
