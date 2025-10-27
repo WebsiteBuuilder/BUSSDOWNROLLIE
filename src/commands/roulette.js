@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { startRoulette, handleRouletteButton, showRouletteRules } from '../roulette/robust-manager.js';
+import { showLobby, handleRouletteButton, showRouletteRules } from '../roulette/robust-manager.js';
 import { safeReply } from '../utils/interaction.js';
 
 export const data = new SlashCommandBuilder()
@@ -8,7 +8,7 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((subcommand) =>
     subcommand
       .setName('play')
-      .setDescription('Start a roulette game')
+      .setDescription('Enter the roulette lobby')
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -25,8 +25,9 @@ export async function execute(interaction) {
   
   if (subcommand === 'play') {
     try {
-      await startRoulette(interaction);
+      await showLobby(interaction);
     } catch (error) {
+      console.error('❌ Error executing /roulette play:', error);
       await safeReply(interaction, {
         content: '❌ Failed to start roulette. Please try again soon.',
         flags: MessageFlags.Ephemeral,

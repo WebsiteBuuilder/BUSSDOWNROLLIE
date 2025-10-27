@@ -14,13 +14,13 @@ export function getNumberColor(num) {
 }
 
 /**
- * Create roulette prompt embed
+ * Create roulette prompt embed (betting screen)
  */
-export function createRoulettePromptEmbed(displayName, totalBet, bets = {}) {
+export function createRoulettePromptEmbed(displayName, totalBet, bets = {}, currentBalance = null) {
   const embed = new EmbedBuilder()
-    .setColor(0x2f3136)
+    .setColor(0x27ae60) // GUHD EATS green
     .setTitle('🎰 **GUHD EATS Roulette**')
-    .setDescription('🎡 *European Roulette - Place your bets!*')
+    .setDescription('🎡 *European Roulette - Place your bets!*\n✨ **"STILL GUUHHHD!"** ✨')
     .addFields(
       {
         name: '👤 **Player**',
@@ -28,18 +28,23 @@ export function createRoulettePromptEmbed(displayName, totalBet, bets = {}) {
         inline: true
       },
       {
-        name: '💰 **Total Bet**',
+        name: '💰 **Current Balance**',
+        value: currentBalance !== null ? `${formatVP(currentBalance)} VP` : 'Loading...',
+        inline: true
+      },
+      {
+        name: '🎯 **Total Bet**',
         value: `${formatVP(totalBet)} VP`,
         inline: true
       },
       {
-        name: '🎯 **Your Bets**',
+        name: '🎲 **Your Bets**',
         value: formatBetsDisplay(bets),
         inline: false
       }
     )
     .setFooter({ 
-      text: '🎰 Place your bets and spin the wheel!',
+      text: '🎰 Place your bets and spin the wheel! • GUHD EATS Casino',
       iconURL: 'https://cdn.discordapp.com/emojis/1234567890123456789.png'
     })
     .setTimestamp();
@@ -85,41 +90,49 @@ function formatBetName(betType) {
 }
 
 /**
- * Create spin animation embed
+ * Create spin animation embed (supports image or text frame)
  */
-export function createSpinEmbed(displayName, frame, caption, totalBet) {
+export function createSpinEmbed(displayName, frame, caption, totalBet, imageUrl = null) {
   const embed = new EmbedBuilder()
     .setColor(0xfaa61a)
     .setTitle('🎰 **GUHD EATS Roulette**')
-    .setDescription('🎡 *European Roulette - Spinning...*')
-    .addFields(
-      {
-        name: '🎡 **Wheel**',
-        value: `${frame}\n\n${caption}`,
-        inline: false
-      },
-      {
-        name: '💰 **Total Bet**',
-        value: `${formatVP(totalBet)} VP`,
-        inline: true
-      },
-      {
-        name: '👤 **Player**',
-        value: `${displayName}`,
-        inline: true
-      }
-    )
-    .setFooter({ 
-      text: '🎰 The wheel is spinning...',
-      iconURL: 'https://cdn.discordapp.com/emojis/1234567890123456789.png'
-    })
-    .setTimestamp();
+    .setDescription('🎡 *European Roulette - Spinning...*\n✨ **"STILL GUUHHHD!"** ✨');
+
+  // Add wheel image if provided
+  if (imageUrl) {
+    embed.setImage(imageUrl);
+  }
+
+  embed.addFields(
+    {
+      name: '🎡 **Wheel Status**',
+      value: imageUrl ? caption : `${frame}\n\n${caption}`,
+      inline: false
+    },
+    {
+      name: '💰 **Total Bet**',
+      value: `${formatVP(totalBet)} VP`,
+      inline: true
+    },
+    {
+      name: '👤 **Player**',
+      value: `${displayName}`,
+      inline: true
+    }
+  );
+
+  embed.setFooter({ 
+    text: '🎰 The wheel is spinning... • GUHD EATS Casino',
+    iconURL: 'https://cdn.discordapp.com/emojis/1234567890123456789.png'
+  });
+  
+  embed.setTimestamp();
 
   return embed;
 }
 
 /**
- * Create result embed
+ * Create result embed with enhanced balance and winnings display
  */
 export function createResultEmbed({
   displayName,
@@ -129,7 +142,11 @@ export function createResultEmbed({
   didWin,
   net,
   bets,
-  houseEdge
+  houseEdge,
+  totalWon = 0,
+  totalBet = 0,
+  newBalance = null,
+  imageUrl = null
 }) {
   // Gold color for winners, red for losers
   const color = didWin ? 0xffd700 : 0xf04747;
@@ -145,31 +162,53 @@ export function createResultEmbed({
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
-    .setDescription(didWin ? '✨ **🎊 CONGRATULATIONS! 🎊** ✨\n💰 You won big! 🎁' : '💔 **The house wins this round!**\n🔮 Try again for better luck!')
-    .addFields(
-      {
-        name: '🎡 **Wheel Result**',
-        value: `${frame}\n\n🎯 **Winning Number:** ${winningDisplay}\n**Color:** ${colorEmoji} **${winningColor.toUpperCase()}**`,
-        inline: false
-      },
-      {
-        name: '💰 **Payout**',
-        value: didWin 
-          ? `**Net:** +${formatVP(net)} VP\n**Status:** ✅ Winner!` 
-          : `**Net:** ${formatVP(net)} VP\n**Status:** ❌ Loss`,
-        inline: true
-      },
-      {
-        name: '🎯 **Your Bets**',
-        value: formatBetsDisplay(bets),
-        inline: true
-      }
-    )
-    .setFooter({ 
-      text: didWin ? '🎰 Round settled • You WON! 🍀' : '🎰 Round settled • GUHD EATS Casino',
-      iconURL: 'https://cdn.discordapp.com/emojis/1234567890123456789.png'
-    })
-    .setTimestamp();
+    .setDescription(
+      didWin 
+        ? '✨ **🎊 CONGRATULATIONS! 🎊** ✨\n💰 **"STILL GUUHHHD!"** 🎁' 
+        : '💔 **The house wins this round!**\n🔮 Try again for better luck!'
+    );
+
+  // Add wheel image if provided
+  if (imageUrl) {
+    embed.setImage(imageUrl);
+  }
+
+  embed.addFields(
+    {
+      name: '🎡 **Wheel Result**',
+      value: imageUrl 
+        ? `🎯 **Winning Number:** ${winningDisplay}\n**Color:** ${colorEmoji} **${winningColor.toUpperCase()}**`
+        : `${frame}\n\n🎯 **Winning Number:** ${winningDisplay}\n**Color:** ${colorEmoji} **${winningColor.toUpperCase()}**`,
+      inline: false
+    },
+    {
+      name: '💰 **Financial Summary**',
+      value: 
+        `**Total Bet:** ${formatVP(totalBet)} VP\n` +
+        `**Total Won:** ${formatVP(totalWon)} VP\n` +
+        `**Net ${didWin ? 'Profit' : 'Loss'}:** ${didWin ? '+' : ''}${formatVP(net)} VP`,
+      inline: true
+    },
+    {
+      name: '🏦 **Balance**',
+      value: newBalance !== null 
+        ? `**New Balance:** ${formatVP(newBalance)} VP\n**Status:** ${didWin ? '✅ Winner!' : '❌ Loss'}` 
+        : `**Status:** ${didWin ? '✅ Winner!' : '❌ Loss'}`,
+      inline: true
+    },
+    {
+      name: '🎯 **Your Bets**',
+      value: formatBetsDisplay(bets),
+      inline: false
+    }
+  );
+
+  embed.setFooter({ 
+    text: didWin ? '🎰 Round settled • You WON! 🍀 • GUHD EATS Casino' : '🎰 Round settled • Better luck next time! • GUHD EATS Casino',
+    iconURL: 'https://cdn.discordapp.com/emojis/1234567890123456789.png'
+  });
+  
+  embed.setTimestamp();
 
   return embed;
 }
@@ -329,4 +368,29 @@ export function createRouletteRulesEmbed() {
     .setTimestamp();
 
   return embed;
+}
+
+/**
+ * Create "Play Again" button for result screen
+ * @param {string} userId - User's Discord ID
+ * @returns {Array<ActionRowBuilder>} Button row
+ */
+export function createPlayAgainButton(userId) {
+  const row = new ActionRowBuilder();
+  
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_playagain_${userId}`)
+      .setLabel('🎰 Play Again')
+      .setStyle(ButtonStyle.Success)
+  );
+  
+  row.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_backtolobby_${userId}`)
+      .setLabel('🏠 Back to Lobby')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  return [row];
 }

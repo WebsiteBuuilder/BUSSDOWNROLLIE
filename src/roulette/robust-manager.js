@@ -6,15 +6,22 @@ import {
   createResultEmbed, 
   createBettingButtons,
   createRouletteRulesEmbed,
+  createPlayAgainButton,
   getNumberColor
 } from './simple-ui.js';
-import { animateRoulette } from './animation.js';
+import {
+  createLobbyEmbed,
+  createLobbyButtons,
+  createDetailedRulesEmbed
+} from './lobby-ui.js';
+import { animateRouletteWithUpdates, animateLiteMode } from './canvas-animation.js';
 import { safeReply } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
 import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
 
 const ACTIVE_ROULETTE = new Map();
+const USE_CANVAS_ANIMATION = true; // Toggle between canvas and lite mode
 
 const PAYOUTS = {
   'red': 2,
@@ -33,7 +40,10 @@ function formatDisplayName(interaction) {
   return interaction.member?.displayName ?? interaction.user.username;
 }
 
-export async function startRoulette(interaction) {
+/**
+ * Show lobby screen (entry point for /roulette play)
+ */
+export async function showLobby(interaction) {
   try {
     const userId = interaction.user.id;
     const user = await getOrCreateUser(userId);
@@ -46,30 +56,66 @@ export async function startRoulette(interaction) {
       return;
     }
 
+    const displayName = formatDisplayName(interaction);
+    const commandId = interaction.id;
+
+    console.log(`🏛️ Showing lobby for user ${userId}`);
+
+    const embed = createLobbyEmbed(user, displayName);
+    const buttons = createLobbyButtons(commandId, user.vp >= 1);
+
+    await interaction.reply({
+      embeds: [embed],
+      components: buttons,
+    });
+
+    // Store lobby state
+    ACTIVE_ROULETTE.set(commandId, {
+      userId,
+      type: 'lobby',
+      displayName
+    });
+
+    console.log(`✅ Lobby displayed for ${displayName}`);
+  } catch (error) {
+    console.error('❌ Error showing lobby:', error);
+    await safeReply(interaction, {
+      content: '❌ Failed to load lobby. Please try again soon.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+}
+
+/**
+ * Start roulette game from lobby
+ */
+async function startGame(interaction, commandId) {
+  try {
+    const userId = interaction.user.id;
+    const user = await getOrCreateUser(userId);
+
     if (user.vp < 1) {
-      await safeReply(interaction, {
-        content: `❌ You need at least 1 VP to play roulette, but you only have ${formatVP(user.vp)}.`,
-        flags: MessageFlags.Ephemeral,
+      await interaction.followUp({ 
+        ephemeral: true, 
+        content: `❌ You need at least 1 VP to play roulette, but you only have ${formatVP(user.vp)}.` 
       });
       return;
     }
 
-    const commandId = interaction.id;
-    
-    console.log(`🎰 Starting roulette for user ${userId} (commandId: ${commandId})`);
-    
-    await interaction.deferReply();
+    console.log(`🎰 Starting game for user ${userId}`);
 
     const displayName = formatDisplayName(interaction);
-    const message = await interaction.editReply({
-      embeds: [createRoulettePromptEmbed(displayName, 0)],
+    
+    await interaction.editReply({
+      embeds: [createRoulettePromptEmbed(displayName, 0, {}, user.vp)],
       components: createBettingButtons(commandId),
     });
 
     ACTIVE_ROULETTE.set(commandId, {
       userId,
-      messageId: message.id,
-      channelId: message.channelId,
+      type: 'betting',
+      messageId: interaction.message.id,
+      channelId: interaction.channelId,
       displayName,
       vipScore: user.streakDays ?? 0,
       bets: {},
@@ -77,16 +123,16 @@ export async function startRoulette(interaction) {
       totalBet: 0
     });
 
-    console.log(`✅ Roulette game started successfully for ${displayName}`);
+    console.log(`✅ Game started for ${displayName}`);
   } catch (error) {
-    console.error('❌ Error starting roulette:', error);
-    await safeReply(interaction, {
-      content: '❌ Failed to start roulette. Please try again soon.',
-      flags: MessageFlags.Ephemeral,
-    });
+    console.error('❌ Error starting game:', error);
+    await interaction.followUp({ ephemeral: true, content: '❌ Failed to start game. Please try again.' });
   }
 }
 
+/**
+ * Handle all roulette button interactions
+ */
 export async function handleRouletteButton(interaction) {
   // CRITICAL: Acknowledge interaction IMMEDIATELY within Discord's 3-second limit
   if (!interaction.deferred && !interaction.replied) {
@@ -101,14 +147,51 @@ export async function handleRouletteButton(interaction) {
   }
 
   try {
-    const [, action, commandId, ...params] = customId.split('_');
-    const state = ACTIVE_ROULETTE.get(commandId);
+    const [, action, commandIdOrUserId, ...params] = customId.split('_');
+
+    // Handle lobby actions
+    if (action === 'join') {
+      await startGame(interaction, commandIdOrUserId);
+      return true;
+    }
+
+    if (action === 'viewrules') {
+      await interaction.followUp({ 
+        ephemeral: true, 
+        embeds: [createDetailedRulesEmbed()] 
+      });
+      return true;
+    }
+
+    if (action === 'refresh') {
+      const user = await getOrCreateUser(interaction.user.id);
+      const displayName = formatDisplayName(interaction);
+      await interaction.editReply({
+        embeds: [createLobbyEmbed(user, displayName)],
+        components: createLobbyButtons(commandIdOrUserId, user.vp >= 1)
+      });
+      return true;
+    }
+
+    // Handle play again / back to lobby
+    if (action === 'playagain') {
+      await showLobby(interaction);
+      return true;
+    }
+
+    if (action === 'backtolobby') {
+      await showLobby(interaction);
+      return true;
+    }
+
+    // Handle betting actions
+    const state = ACTIVE_ROULETTE.get(commandIdOrUserId);
 
     if (!state) {
-      console.log(`⚠️ No active roulette game found for commandId: ${commandId}`);
+      console.log(`⚠️ No active roulette game found for commandId: ${commandIdOrUserId}`);
       
       if (!interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
+        await interaction.followUp({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
       }
       return true;
     }
@@ -117,7 +200,7 @@ export async function handleRouletteButton(interaction) {
       console.log(`⚠️ Unauthorized interaction attempt by ${interaction.user.id} on game owned by ${state.userId}`);
       
       if (!interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
+        await interaction.followUp({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
       }
       return true;
     }
@@ -130,26 +213,29 @@ export async function handleRouletteButton(interaction) {
         // Change selected chip value
         const chipValue = parseInt(params[0]);
         state.selectedChip = chipValue;
-        await updateRouletteUI(interaction, state);
+        await updateBettingUI(interaction, state, commandIdOrUserId);
         console.log(`✅ Updated chip selection to ${chipValue} VP`);
         break;
 
       case 'bet':
         // Place a bet
         const betType = params.join('_');
-        await placeBet(interaction, state, betType);
+        await placeBet(interaction, state, betType, commandIdOrUserId);
         break;
 
       case 'spin':
         // Spin the wheel
-        await spinWheel(interaction, state);
+        await spinWheel(interaction, state, commandIdOrUserId);
         break;
 
       case 'clear':
-        // Clear all bets
+        // Clear all bets and refund VP
+        if (state.totalBet > 0) {
+          await addVP(state.userId, state.totalBet);
+        }
         state.bets = {};
         state.totalBet = 0;
-        await updateRouletteUI(interaction, state);
+        await updateBettingUI(interaction, state, commandIdOrUserId);
         console.log(`✅ Cleared all bets for ${interaction.user.username}`);
         break;
 
@@ -175,7 +261,7 @@ export async function handleRouletteButton(interaction) {
   return true;
 }
 
-async function placeBet(interaction, state, betType) {
+async function placeBet(interaction, state, betType, commandId) {
   try {
     const user = await getOrCreateUser(state.userId);
     
@@ -200,14 +286,16 @@ async function placeBet(interaction, state, betType) {
     // Deduct VP from user immediately
     await removeVP(state.userId, state.selectedChip);
 
-    await updateRouletteUI(interaction, state);
+    // Fetch updated balance
+    const updatedUser = await getOrCreateUser(state.userId);
+    await updateBettingUI(interaction, state, commandId, updatedUser.vp);
   } catch (error) {
     console.error('❌ Error placing bet:', error);
     await interaction.followUp({ ephemeral: true, content: '❌ Failed to place bet. Please try again.' });
   }
 }
 
-async function spinWheel(interaction, state) {
+async function spinWheel(interaction, state, commandId) {
   if (state.totalBet === 0) {
     console.log('⚠️ Attempted to spin with no bets placed');
     await interaction.followUp({ 
@@ -220,17 +308,9 @@ async function spinWheel(interaction, state) {
   console.log(`🎡 Spinning wheel for ${state.displayName} with bets totaling ${state.totalBet} VP`);
 
   // Remove the game from active games
-  const commandId = interaction.customId.split('_')[2];
   ACTIVE_ROULETTE.delete(commandId);
 
-  const updateFrame = async ({ frame, caption }) => {
-    await interaction.editReply({
-      embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
-      components: [],
-    });
-  };
-
-  // Determine winning number and color
+  // Determine winning number
   const primaryBetType = Object.keys(state.bets)[0];
   let betDescriptor = {};
   
@@ -248,7 +328,43 @@ async function spinWheel(interaction, state) {
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
   // Animate the wheel
-  await animateRoulette(updateFrame, `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`);
+  if (USE_CANVAS_ANIMATION) {
+    try {
+      await animateRouletteWithUpdates(
+        async (imageUrl, attachment, caption) => {
+          await interaction.editReply({
+            embeds: [createSpinEmbed(state.displayName, '', caption, state.totalBet, imageUrl)],
+            files: [attachment],
+            components: [],
+          });
+        },
+        pocket.number,
+        8000
+      );
+    } catch (canvasError) {
+      console.error('❌ Canvas animation failed, falling back to lite mode:', canvasError);
+      // Fallback to lite mode
+      await animateLiteMode(
+        async (frame, caption) => {
+          await interaction.editReply({
+            embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
+            components: [],
+          });
+        },
+        `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`
+      );
+    }
+  } else {
+    await animateLiteMode(
+      async (frame, caption) => {
+        await interaction.editReply({
+          embeds: [createSpinEmbed(state.displayName, frame, caption, state.totalBet)],
+          components: [],
+        });
+      },
+      `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`
+    );
+  }
 
   // Calculate winnings
   let totalWinnings = 0;
@@ -273,6 +389,9 @@ async function spinWheel(interaction, state) {
 
   recordRouletteOutcome(state.userId, didWin);
 
+  // Fetch updated balance
+  const updatedUser = await getOrCreateUser(state.userId);
+
   const resultEmbed = createResultEmbed({
     displayName: state.displayName,
     winningNumber: pocket.number,
@@ -282,9 +401,17 @@ async function spinWheel(interaction, state) {
     net,
     bets: state.bets,
     houseEdge: houseEdgeConfig.roulette.baseEdge,
+    totalWon: totalWinnings,
+    totalBet: state.totalBet,
+    newBalance: updatedUser.vp
   });
 
-  await interaction.editReply({ embeds: [resultEmbed], components: [] });
+  await interaction.editReply({ 
+    embeds: [resultEmbed], 
+    components: createPlayAgainButton(state.userId),
+    files: []
+  });
+
   console.log(`✅ Roulette game completed for ${state.displayName}`);
 }
 
@@ -315,10 +442,14 @@ function checkBetWin(betType, winningNumber, winningColor) {
   }
 }
 
-async function updateRouletteUI(interaction, state) {
+async function updateBettingUI(interaction, state, commandId, currentBalance = null) {
   try {
-    const embed = createRoulettePromptEmbed(state.displayName, state.totalBet, state.bets);
-    const commandId = interaction.customId.split('_')[2];
+    if (currentBalance === null) {
+      const user = await getOrCreateUser(state.userId);
+      currentBalance = user.vp;
+    }
+
+    const embed = createRoulettePromptEmbed(state.displayName, state.totalBet, state.bets, currentBalance);
     const components = createBettingButtons(commandId, state.selectedChip);
 
     await interaction.editReply({
@@ -326,7 +457,7 @@ async function updateRouletteUI(interaction, state) {
       components: components,
     });
   } catch (error) {
-    console.error('❌ Error updating roulette UI:', error);
+    console.error('❌ Error updating betting UI:', error);
     // Attempt to recover
     try {
       await interaction.editReply({
@@ -342,11 +473,10 @@ async function updateRouletteUI(interaction, state) {
 
 export async function showRouletteRules(interaction) {
   try {
-    const embed = createRouletteRulesEmbed();
+    const embed = createDetailedRulesEmbed();
     await interaction.reply({ embeds: [embed] });
   } catch (error) {
     console.error('❌ Error showing roulette rules:', error);
     await interaction.reply({ content: '❌ Failed to load rules. Please try again.', ephemeral: true });
   }
 }
-
