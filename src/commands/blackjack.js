@@ -204,7 +204,7 @@ export async function execute(interaction, _client) {
       return;
     }
 
-    await showGameUI(interaction, round, gameState, user);
+    await showGameUI(interaction, round, gameState, user, gameState.hasPeeked || false);
 
     const timeoutId = setTimeout(async () => {
       try {
@@ -365,12 +365,12 @@ async function showRules(interaction) {
   await interaction.reply({ embeds: [embed] });
 }
 
-async function showGameUI(interaction, round, gameState, user) {
+async function showGameUI(interaction, round, gameState, user, hasPeeked = false) {
   const playerValue = calculateHandValue(gameState.playerHand);
-  const dealerValue = calculateHandValue([gameState.dealerHand[0]]);
+  const dealerShowingValue = calculateHandValue([gameState.dealerHand[0]]);
 
-  const embed = createGameUIEmbed(gameState, user, playerValue, dealerValue);
-  const row = createActionButtons(round, gameState, user);
+  const embed = createGameUIEmbed(gameState, user, playerValue, dealerShowingValue, hasPeeked);
+  const row = createActionButtons(round, gameState, user, hasPeeked);
 
   await updateInteractionMessage(interaction, {
     embeds: [embed],
@@ -464,7 +464,7 @@ export async function handleBlackjackInteraction(interaction) {
             where: { id: roundId },
             data: { state: JSON.stringify(gameState) },
           });
-          await showGameUI(interaction, round, gameState, round.user);
+          await showGameUI(interaction, round, gameState, round.user, gameState.hasPeeked || false);
         }
         break;
 
@@ -511,6 +511,54 @@ export async function handleBlackjackInteraction(interaction) {
         });
 
         await resolveGame(interaction, round, gameState, round.user, { origin: 'player_double' });
+        break;
+
+      case 'peek':
+        const peekCost = Math.max(1, Math.floor(gameState.bet * 0.1)); // 10% of bet, minimum 1 VP
+        
+        // Check if user has enough VP
+        if (round.user.vp < peekCost) {
+          return interaction.followUp(
+            ephemeral({
+              content: `❌ You need ${formatVP(peekCost)} VP to peek at the dealer's card.`,
+            })
+          );
+        }
+
+        // Check if already peeked
+        if (gameState.hasPeeked) {
+          return interaction.followUp(
+            ephemeral({
+              content: '❌ You have already peeked at the dealer\'s card.',
+            })
+          );
+        }
+
+        // Deduct peek cost
+        await prisma.user.update({
+          where: { id: round.user.id },
+          data: { vp: { decrement: peekCost } },
+        });
+
+        // Mark as peeked
+        gameState.hasPeeked = true;
+
+        // Update state and show UI with peeked cards
+        await prisma.blackjackRound.update({
+          where: { id: roundId },
+          data: { state: JSON.stringify(gameState) },
+        });
+
+        // Refresh user data after VP deduction
+        const updatedUser = await prisma.user.findUnique({ where: { id: round.user.id } });
+        await showGameUI(interaction, round, gameState, updatedUser, true);
+
+        // Send confirmation message
+        await interaction.followUp(
+          ephemeral({
+            content: `👁️ You peeked at the dealer's hole card for ${formatVP(peekCost)} VP!`,
+          })
+        );
         break;
     }
   } catch (error) {

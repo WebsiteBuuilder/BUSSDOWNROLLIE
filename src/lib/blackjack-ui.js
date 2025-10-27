@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { formatVP } from './utils.js';
+import { calculateHandValue } from './blackjack.js';
 
 /**
  * Enhanced Discord-style blackjack UI components
@@ -46,7 +47,15 @@ export function createHandDisplay(hand, hideFirst = false, handName = 'Hand') {
 /**
  * Create enhanced game UI embed
  */
-export function createGameUIEmbed(gameState, user, playerValue, dealerValue) {
+export function createGameUIEmbed(gameState, user, playerValue, dealerShowingValue, hasPeeked = false) {
+  const dealerHandDisplay = hasPeeked 
+    ? createHandDisplay(gameState.dealerHand, false) // Show all cards if peeked
+    : createHandDisplay(gameState.dealerHand, true);  // Hide first card if not peeked
+  
+  const dealerValueText = hasPeeked 
+    ? `**Total:** \`${calculateHandValue(gameState.dealerHand)}\``
+    : `**Showing:** \`${dealerShowingValue}\``;
+
   const embed = new EmbedBuilder()
     .setColor(0x2f3136) // Discord dark gray
     .setTitle('♠️ **GUHD EATS Blackjack**')
@@ -59,7 +68,7 @@ export function createGameUIEmbed(gameState, user, playerValue, dealerValue) {
       },
       {
         name: '🃏 **Dealer Hand**',
-        value: `${createHandDisplay(gameState.dealerHand, true)}\n**Showing:** \`${dealerValue}\``,
+        value: `${dealerHandDisplay}\n${dealerValueText}`,
         inline: false
       },
       {
@@ -149,7 +158,7 @@ export function createResultUIEmbed(gameState, user, playerValue, dealerValue, r
 /**
  * Create enhanced action buttons
  */
-export function createActionButtons(round, gameState, user) {
+export function createActionButtons(round, gameState, user, hasPeeked = false) {
   const row = new ActionRowBuilder();
 
   // Hit button
@@ -178,6 +187,18 @@ export function createActionButtons(round, gameState, user) {
         .setLabel('💎 Double')
         .setStyle(ButtonStyle.Secondary)
         .setEmoji('💎')
+    );
+  }
+
+  // Peek button (only if not already peeked and user has enough VP)
+  const peekCost = Math.max(1, Math.floor(gameState.bet * 0.1)); // 10% of bet, minimum 1 VP
+  if (!hasPeeked && user.vp >= peekCost) {
+    row.addComponents(
+      new ButtonBuilder()
+        .setCustomId(`bj_peek_${round.id}`)
+        .setLabel(`👁️ Peek (${formatVP(peekCost)})`)
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji('👁️')
     );
   }
 
