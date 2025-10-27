@@ -161,12 +161,8 @@ function drawRouletteFrame(
 
     ctx.save();
 
-    // Winning number glow (only if showing result)
-    if (showResult && segment.num === winningNumber) {
-      ctx.shadowColor = "#fbbf24";
-      ctx.shadowBlur = 20;
-    }
-
+    // Remove glow for better compression (we show result overlay instead)
+    
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, wheelRadius, startAngle, endAngle);
@@ -197,7 +193,7 @@ function drawRouletteFrame(
     ctx.save();
     ctx.rotate(startAngle + segmentAngle / 2);
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 14px Arial";
+    ctx.font = "bold 12px Arial"; // Reduced font size for compression
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(segment.num.toString(), wheelRadius * 0.72, 0);
@@ -220,7 +216,7 @@ function drawRouletteFrame(
 
     // Simple ball (NO blur trail, NO shadow, NO gradient)
     ctx.beginPath();
-    ctx.arc(ballX, ballY, 7, 0, Math.PI * 2);
+    ctx.arc(ballX, ballY, 6, 0, Math.PI * 2); // Slightly smaller ball
     ctx.fillStyle = "#f0f0f0";
     ctx.fill();
     ctx.strokeStyle = "#707070";
@@ -266,11 +262,11 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   }
 
   const {
-    width = 320,      // Optimized for <3MB
-    height = 320,
-    duration = 9500,  // 9.5 seconds total (multi-phase smooth animation)
-    fps = 18,         // 18 FPS for smoother motion (171 frames)
-    quality = 10,     // Balanced quality
+    width = 300,      // Reduced from 320 for smaller file size
+    height = 300,
+    duration = 8500,  // 8.5 seconds total (optimized)
+    fps = 16,         // 16 FPS (136 frames - optimal balance)
+    quality = 8,      // Lower quality = better compression with octree
     debugMode = false // Enable debug logging
   } = options;
 
@@ -323,12 +319,12 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     const ballTotalRotations = 10 + Math.random() * 3; // Fewer rotations for smoother visual
     const ballTotalAngle = Math.PI * 2 * ballTotalRotations;
     
-    // Animation timing phases (REDESIGNED for smooth deceleration)
-    const fastSpinTime = 3.0;      // Fast spinning phase (constant speed)
-    const slowdownTime = 2.5;      // Visible slowdown phase (dramatic deceleration)
-    const settlingTime = 1.0;      // Ball settles into pocket (ultra-slow)
-    const restPhaseTime = 3.0;     // Ball completely still on winning number
-    const totalAnimationTime = fastSpinTime + slowdownTime + settlingTime + restPhaseTime;
+    // Animation timing phases (OPTIMIZED for file size + smooth deceleration)
+    const fastSpinTime = 2.5;      // Fast spinning phase
+    const slowdownTime = 2.5;      // Visible slowdown phase (dramatic deceleration) - KEEP THIS
+    const settlingTime = 1.0;      // Ball settles into pocket (ultra-slow) - KEEP THIS
+    const restPhaseTime = 2.5;     // Ball completely still on winning number
+    const totalAnimationTime = fastSpinTime + slowdownTime + settlingTime + restPhaseTime; // 8.5s total
     
     // Ball radius
     const maxBallRadius = Math.min(width, height) * 0.42;
@@ -336,13 +332,13 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     
     // Debug logging
     if (debugMode) {
-      console.log('🎲 [ROULETTE DEBUG MODE - SMOOTH PHYSICS]');
+      console.log('🎲 [ROULETTE DEBUG MODE - SIZE OPTIMIZED]');
       console.log(`  Winning Number: ${winningNumber} (index: ${winningIndex})`);
       console.log(`  Target Wheel Angle: ${(targetWheelAngle * 180 / Math.PI).toFixed(2)}°`);
       console.log(`  Wheel: v0=${wheelInitialVelocity.toFixed(2)} rad/s, a=${wheelDeceleration.toFixed(2)} rad/s²`);
       console.log(`  Ball: v0=${ballInitialVelocity.toFixed(2)} rad/s (1.1x wheel speed)`);
       console.log(`  Phases: fast=${fastSpinTime}s, slowdown=${slowdownTime}s, settling=${settlingTime}s, rest=${restPhaseTime}s`);
-      console.log(`  Total: ${totalAnimationTime}s`);
+      console.log(`  Total: ${totalAnimationTime}s | Frames: ${Math.floor((totalAnimationTime * fps))} @ ${fps}fps`);
     }
 
     let lastLogTime = Date.now();
@@ -362,7 +358,7 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
         const restEnd = settlingEnd + restPhaseTime;
         
         if (currentTime <= fastSpinEnd) {
-          // ===== PHASE 1: FAST SPIN (0-3s) =====
+          // ===== PHASE 1: FAST SPIN (0-2.5s) =====
           // Ball and wheel spin at relatively constant speed
           const t = currentTime;
           const phaseProgress = t / fastSpinTime;
@@ -383,7 +379,7 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
           showResult = false;
           
         } else if (currentTime <= slowdownEnd) {
-          // ===== PHASE 2: SLOWDOWN (3-5.5s) =====
+          // ===== PHASE 2: SLOWDOWN (2.5-5s) =====
           // Ball VISIBLY slows down dramatically
           const phaseTime = currentTime - fastSpinEnd;
           const phaseProgress = phaseTime / slowdownTime;
@@ -408,7 +404,7 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
           showResult = false;
           
         } else if (currentTime <= settlingEnd) {
-          // ===== PHASE 3: SETTLING (5.5-6.5s) =====
+          // ===== PHASE 3: SETTLING (5-6s) =====
           // Ball ultra-slowly settles into winning pocket
           const phaseTime = currentTime - slowdownEnd;
           const phaseProgress = phaseTime / settlingTime;
@@ -438,7 +434,7 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
           showResult = false;
           
         } else if (currentTime <= restEnd) {
-          // ===== PHASE 4: REST (6.5-9.5s) =====
+          // ===== PHASE 4: REST (6-8.5s) =====
           // Ball is COMPLETELY STILL on winning number
           wheelRotation = targetWheelAngle;
           ballAngle = BALL_LANDING_POSITION;

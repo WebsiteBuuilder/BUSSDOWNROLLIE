@@ -290,9 +290,9 @@ async function spinWheel(interaction, state, commandId) {
     const startGen = Date.now();
 
         const result = await generateCinematicSpin(pocket.number, {
-          duration: 9500,  // 9.5 seconds (smooth multi-phase animation)
-          fps: 18,         // 18 FPS (smoother motion)
-          quality: 10,     // 10 = balanced quality/size
+          duration: 8500,  // 8.5 seconds (optimized for file size)
+          fps: 16,         // 16 FPS (optimal balance)
+          quality: 8,      // 8 = better compression with octree
           debugMode: false // Set to true for physics debugging
         });
 
@@ -313,8 +313,8 @@ async function spinWheel(interaction, state, commandId) {
       components: []
     });
 
-    // Wait for animation to play (9.5 seconds)
-    const playDuration = animationMetadata.duration || 9500;
+    // Wait for animation to play (8.5 seconds)
+    const playDuration = animationMetadata.duration || 8500;
     await new Promise(resolve => setTimeout(resolve, playDuration));
 
     console.log(`✅ Cinematic animation completed | ${animationMetadata.frames} frames | ${animationMetadata.sizeMB}MB | ${animationMetadata.encodeTimeSeconds}s`);
