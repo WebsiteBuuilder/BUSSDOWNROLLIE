@@ -96,13 +96,17 @@ export async function showLobby(interaction) {
  */
 async function startGame(interaction, commandId) {
   try {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferUpdate();
+    }
+
     const userId = interaction.user.id;
     const user = await getOrCreateUser(userId);
 
     if (user.vp < 1) {
-      await interaction.followUp({ 
-        ephemeral: true, 
-        content: `❌ You need at least 1 VP to play roulette, but you only have ${formatVP(user.vp)}.` 
+      await interaction.followUp({
+        flags: MessageFlags.Ephemeral,
+        content: `❌ You need at least 1 VP to play roulette, but you only have ${formatVP(user.vp)}.`
       });
       return;
     }
@@ -131,7 +135,7 @@ async function startGame(interaction, commandId) {
     console.log(`✅ Game started for ${displayName}`);
   } catch (error) {
     console.error('❌ Error starting game:', error);
-    await interaction.followUp({ ephemeral: true, content: '❌ Failed to start game. Please try again.' });
+    await safeReply(interaction, { flags: MessageFlags.Ephemeral, content: '❌ Failed to start game. Please try again.' });
   }
 }
 
@@ -163,14 +167,17 @@ export async function handleRouletteButton(interaction) {
       }
 
       case 'viewrules': {
-        await interaction.followUp({
-          ephemeral: true,
+        await safeReply(interaction, {
+          flags: MessageFlags.Ephemeral,
           embeds: [createDetailedRulesEmbed()]
         });
         return true;
       }
 
       case 'refresh': {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferUpdate();
+        }
         const user = await getOrCreateUser(interaction.user.id);
         const displayName = formatDisplayName(interaction);
         await interaction.editReply({
@@ -195,9 +202,9 @@ export async function handleRouletteButton(interaction) {
     if (!state) {
       console.log(`⚠️ No active roulette game found for commandId: ${commandId}`);
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
+        await interaction.reply({ flags: MessageFlags.Ephemeral, content: '⏱️ This roulette game is no longer active.' });
       } else {
-        await interaction.followUp({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
+        await interaction.followUp({ flags: MessageFlags.Ephemeral, content: '⏱️ This roulette game is no longer active.' });
       }
       return true;
     }
@@ -205,9 +212,9 @@ export async function handleRouletteButton(interaction) {
     if (interaction.user.id !== state.userId) {
       console.log(`⚠️ Unauthorized interaction attempt by ${interaction.user.id} on game owned by ${state.userId}`);
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
+        await interaction.reply({ flags: MessageFlags.Ephemeral, content: '🙅 Only the original player can interact with this game.' });
       } else {
-        await interaction.followUp({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
+        await interaction.followUp({ flags: MessageFlags.Ephemeral, content: '🙅 Only the original player can interact with this game.' });
       }
       return true;
     }
@@ -253,7 +260,7 @@ export async function handleRouletteButton(interaction) {
 
       default: {
         console.log(`⚠️ Unknown action: ${action}`);
-        await interaction.followUp({ ephemeral: true, content: '❌ Unknown action.' });
+        await interaction.followUp({ flags: MessageFlags.Ephemeral, content: '❌ Unknown action.' });
       }
     }
   } catch (error) {
@@ -261,9 +268,9 @@ export async function handleRouletteButton(interaction) {
 
     try {
       if (!interaction.deferred && !interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '❌ An error occurred. Please try again.' });
+        await interaction.reply({ flags: MessageFlags.Ephemeral, content: '❌ An error occurred. Please try again.' });
       } else {
-        await interaction.followUp({ ephemeral: true, content: '❌ An error occurred. Please try again.' });
+        await interaction.followUp({ flags: MessageFlags.Ephemeral, content: '❌ An error occurred. Please try again.' });
       }
     } catch (followUpError) {
       console.error('❌ Failed to send error message:', followUpError);
@@ -281,9 +288,9 @@ async function placeBet(interaction, state, betType, commandId) {
     
     if (user.vp < state.selectedChip) {
       console.log(`⚠️ Insufficient VP: user has ${user.vp}, needs ${state.selectedChip}`);
-      await interaction.followUp({ 
-        ephemeral: true, 
-        content: `❌ You need ${formatVP(state.selectedChip)} VP to place this bet, but you only have ${formatVP(user.vp)}.` 
+      await interaction.followUp({
+        flags: MessageFlags.Ephemeral,
+        content: `❌ You need ${formatVP(state.selectedChip)} VP to place this bet, but you only have ${formatVP(user.vp)}.`
       });
       return;
     }
@@ -305,7 +312,7 @@ async function placeBet(interaction, state, betType, commandId) {
     await updateBettingUI(interaction, state, commandId, updatedUser.vp);
   } catch (error) {
     console.error('❌ Error placing bet:', error);
-    await interaction.followUp({ ephemeral: true, content: '❌ Failed to place bet. Please try again.' });
+    await interaction.followUp({ flags: MessageFlags.Ephemeral, content: '❌ Failed to place bet. Please try again.' });
   }
 }
 
@@ -313,7 +320,7 @@ async function spinWheel(interaction, state, commandId) {
   if (state.totalBet === 0) {
     console.log('⚠️ Attempted to spin with no bets placed');
     await interaction.followUp({
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
       content: '❌ You must place at least one bet before spinning!'
     });
     return;
@@ -494,6 +501,6 @@ export async function showRouletteRules(interaction) {
     await interaction.reply({ embeds: [embed] });
   } catch (error) {
     console.error('❌ Error showing roulette rules:', error);
-    await interaction.reply({ content: '❌ Failed to load rules. Please try again.', ephemeral: true });
+    await interaction.reply({ content: '❌ Failed to load rules. Please try again.', flags: MessageFlags.Ephemeral });
   }
 }
