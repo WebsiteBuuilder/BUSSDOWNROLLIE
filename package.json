@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "build": "tsc -p tsconfig.json && node scripts/generate-runtime-entry.mjs",
-    "prebuild": "node scripts/prebuild-validate.js",
+    "prebuild": "node scripts/prebuild-validate.cjs",
     "preflight": "node scripts/validate-roulette-deps.js",
     "start": "node dist/src/index.js",
     "postinstall": "node -e \"try{require('better-sqlite3');}catch(e){process.exit(0)}\" || npm rebuild better-sqlite3",
