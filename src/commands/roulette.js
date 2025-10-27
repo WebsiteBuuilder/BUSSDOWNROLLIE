@@ -1,5 +1,10 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { startRoulette, handleRouletteButton, showRouletteRules } from '../roulette/robust-manager.js';
+import {
+  startRoulette,
+  handleRouletteButton as handleRouletteButtonRobust,
+  showRouletteRules,
+} from '../roulette/robust-manager.js';
+import { handleRouletteButton as handleRouletteButtonClassic } from '../roulette/manager.js';
 import { safeReply } from '../utils/interaction.js';
 
 export const data = new SlashCommandBuilder()
@@ -35,4 +40,16 @@ export async function execute(interaction) {
   }
 }
 
-export { handleRouletteButton };
+export async function handleRouletteButton(interaction) {
+  const customId = interaction.customId ?? '';
+
+  if (customId.startsWith('roulette_')) {
+    return handleRouletteButtonRobust(interaction);
+  }
+
+  if (customId.startsWith('roulette:')) {
+    return handleRouletteButtonClassic(interaction);
+  }
+
+  return false;
+}

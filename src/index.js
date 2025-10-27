@@ -213,7 +213,7 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      if (customId.startsWith('roulette:')) {
+      if (customId.startsWith('roulette')) {
         const handled = await handleRouletteButton(interaction);
         if (handled) {
           return;

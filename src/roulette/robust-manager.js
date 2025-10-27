@@ -9,7 +9,7 @@ import {
   getNumberColor
 } from './simple-ui.js';
 import { animateRoulette } from './animation.js';
-import { safeReply } from '../utils/interaction.js';
+import { safeReply, ackWithin3s } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
 import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
@@ -88,88 +88,88 @@ export async function startRoulette(interaction) {
 }
 
 export async function handleRouletteButton(interaction) {
-  // CRITICAL: Acknowledge interaction IMMEDIATELY within Discord's 3-second limit
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferUpdate();
-  }
-
   const customId = interaction.customId ?? '';
   console.log(`🎰 Button interaction: ${customId}`);
-  
+
   if (!customId.startsWith('roulette_')) {
     return false;
   }
 
+  const finishAckTimer = ackWithin3s(interaction, {
+    game: 'roulette',
+    customId,
+    userId: interaction.user?.id,
+  });
+
   try {
-    const [, action, commandId, ...params] = customId.split('_');
+    const [, action, commandId, ...rawParams] = customId.split('_');
+    const params = rawParams.filter(Boolean);
     const state = ACTIVE_ROULETTE.get(commandId);
 
     if (!state) {
       console.log(`⚠️ No active roulette game found for commandId: ${commandId}`);
-      
-      if (!interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
-      }
+      await interaction.reply({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
       return true;
     }
 
     if (interaction.user.id !== state.userId) {
       console.log(`⚠️ Unauthorized interaction attempt by ${interaction.user.id} on game owned by ${state.userId}`);
-      
-      if (!interaction.replied) {
-        await interaction.reply({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
-      }
+      await interaction.reply({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
       return true;
+    }
+
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferUpdate();
     }
 
     console.log(`✅ Processing ${action} action for user ${interaction.user.username}`);
 
-    // Process the action
     switch (action) {
-      case 'chip':
-        // Change selected chip value
-        const chipValue = parseInt(params[0]);
+      case 'chip': {
+        const chipValue = parseInt(params[0], 10);
         state.selectedChip = chipValue;
         await updateRouletteUI(interaction, state);
         console.log(`✅ Updated chip selection to ${chipValue} VP`);
         break;
+      }
 
-      case 'bet':
-        // Place a bet
+      case 'bet': {
         const betType = params.join('_');
         await placeBet(interaction, state, betType);
         break;
+      }
 
-      case 'spin':
-        // Spin the wheel
-        await spinWheel(interaction, state);
+      case 'spin': {
+        await spinWheel(interaction, state, commandId);
         break;
+      }
 
-      case 'clear':
-        // Clear all bets
+      case 'clear': {
         state.bets = {};
         state.totalBet = 0;
         await updateRouletteUI(interaction, state);
         console.log(`✅ Cleared all bets for ${interaction.user.username}`);
         break;
+      }
 
       default:
         console.log(`⚠️ Unknown action: ${action}`);
-        if (!interaction.replied) {
-          await interaction.followUp({ ephemeral: true, content: '❌ Unknown action.' });
-        }
+        await interaction.followUp({ ephemeral: true, content: '❌ Unknown action.' });
     }
   } catch (error) {
     console.error('❌ Roulette button error:', error);
-    
-    // Try to respond with error if interaction isn't already replied to
+
     try {
-      if (!interaction.replied) {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.reply({ ephemeral: true, content: '❌ An error occurred. Please try again.' });
+      } else {
         await interaction.followUp({ ephemeral: true, content: '❌ An error occurred. Please try again.' });
       }
     } catch (followUpError) {
       console.error('❌ Failed to send error message:', followUpError);
     }
+  } finally {
+    finishAckTimer();
   }
 
   return true;
@@ -207,12 +207,12 @@ async function placeBet(interaction, state, betType) {
   }
 }
 
-async function spinWheel(interaction, state) {
+async function spinWheel(interaction, state, commandId) {
   if (state.totalBet === 0) {
     console.log('⚠️ Attempted to spin with no bets placed');
-    await interaction.followUp({ 
-      ephemeral: true, 
-      content: '❌ You must place at least one bet before spinning!' 
+    await interaction.followUp({
+      ephemeral: true,
+      content: '❌ You must place at least one bet before spinning!'
     });
     return;
   }
@@ -220,7 +220,6 @@ async function spinWheel(interaction, state) {
   console.log(`🎡 Spinning wheel for ${state.displayName} with bets totaling ${state.totalBet} VP`);
 
   // Remove the game from active games
-  const commandId = interaction.customId.split('_')[2];
   ACTIVE_ROULETTE.delete(commandId);
 
   const updateFrame = async ({ frame, caption }) => {
