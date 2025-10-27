@@ -131,24 +131,32 @@ export function createResultEmbed({
   bets,
   houseEdge
 }) {
-  const color = didWin ? 0x43b581 : 0xf04747;
-  const title = didWin ? '🎉 **WINNER!**' : '😔 **Better Luck Next Time**';
+  // Gold color for winners, red for losers
+  const color = didWin ? 0xffd700 : 0xf04747;
+  const title = didWin ? '🎉 **🏆 WINNER! 🏆**' : '😔 **Better Luck Next Time**';
   
   const colorEmoji = winningColor === 'red' ? '🔴' : winningColor === 'black' ? '⚫' : '🟢';
+  
+  // Gold glow effect for winning number
+  const winningDisplay = didWin 
+    ? `✨ **✨ ${winningNumber} ✨** ✨` 
+    : `**${winningNumber}**`;
 
   const embed = new EmbedBuilder()
     .setColor(color)
     .setTitle(title)
-    .setDescription(didWin ? '✨ **Congratulations!** You won!' : '💔 **The house wins this round!**')
+    .setDescription(didWin ? '✨ **🎊 CONGRATULATIONS! 🎊** ✨\n💰 You won big! 🎁' : '💔 **The house wins this round!**\n🔮 Try again for better luck!')
     .addFields(
       {
         name: '🎡 **Wheel Result**',
-        value: `${frame}\n\n**Winning Number:** **${winningNumber}**\n**Color:** ${colorEmoji} **${winningColor.toUpperCase()}**`,
+        value: `${frame}\n\n🎯 **Winning Number:** ${winningDisplay}\n**Color:** ${colorEmoji} **${winningColor.toUpperCase()}**`,
         inline: false
       },
       {
         name: '💰 **Payout**',
-        value: `**Net:** ${didWin ? '+' : ''}${formatVP(net)} VP`,
+        value: didWin 
+          ? `**Net:** +${formatVP(net)} VP\n**Status:** ✅ Winner!` 
+          : `**Net:** ${formatVP(net)} VP\n**Status:** ❌ Loss`,
         inline: true
       },
       {
@@ -158,7 +166,7 @@ export function createResultEmbed({
       }
     )
     .setFooter({ 
-      text: '🎰 Round settled • GUHD EATS Casino',
+      text: didWin ? '🎰 Round settled • You WON! 🍀' : '🎰 Round settled • GUHD EATS Casino',
       iconURL: 'https://cdn.discordapp.com/emojis/1234567890123456789.png'
     })
     .setTimestamp();
