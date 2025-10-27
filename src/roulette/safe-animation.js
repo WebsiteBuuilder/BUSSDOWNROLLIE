@@ -1,5 +1,6 @@
 /**
- * Cinematic Animation Enforcer
+ * Cinematic Animation Enforcer V2
+ * Using gif-encoder-2 with neuquant for better compression
  * NO FALLBACK - Cinematic rendering only or throw error
  */
 
@@ -18,7 +19,7 @@ export async function validateCinematicAnimation() {
   validationAttempted = true;
   
   try {
-    console.log('🔍 Validating cinematic animation system...');
+    console.log('🔍 Validating cinematic animation system V2...');
     
     // Test canvas import
     const canvas = await import('canvas');
@@ -26,14 +27,14 @@ export async function validateCinematicAnimation() {
       throw new Error('canvas.createCanvas not available');
     }
     
-    // Test gifencoder import
-    const gifencoder = await import('gifencoder');
+    // Test gif-encoder-2 import
+    const gifencoder = await import('gif-encoder-2');
     if (!gifencoder.default) {
-      throw new Error('gifencoder.default not available');
+      throw new Error('gif-encoder-2.default not available');
     }
     
-    // Load cinematic module
-    cinematicModule = await import('./cinematic-animation.js');
+    // Load cinematic module V2
+    cinematicModule = await import('./cinematic-animation-v2.js');
     if (!cinematicModule.generateCinematicSpin) {
       throw new Error('generateCinematicSpin function not found');
     }
@@ -50,18 +51,18 @@ export async function validateCinematicAnimation() {
       throw new Error('Canvas context missing required methods');
     }
     
-    console.log('✅ Cinematic animation validated successfully');
+    console.log('✅ Cinematic animation V2 validated successfully');
     validationPassed = true;
     return true;
   } catch (error) {
-    console.error('❌ Cinematic animation validation FAILED');
+    console.error('❌ Cinematic animation V2 validation FAILED');
     console.error(`   Error: ${error.message}`);
     if (error.stack) {
       console.error(`   Stack: ${error.stack}`);
     }
     console.error('');
     console.error('⚠️  Roulette command will be DISABLED');
-    console.error('   Missing dependencies: canvas or gifencoder');
+    console.error('   Missing dependencies: canvas or gif-encoder-2');
     console.error('   Please check Docker build logs for system library issues');
     console.error('');
     validationPassed = false;
@@ -70,7 +71,7 @@ export async function validateCinematicAnimation() {
 }
 
 /**
- * Generate cinematic spin - strict mode only (NO FALLBACK)
+ * Generate cinematic spin V2 - strict mode only (NO FALLBACK)
  */
 export async function generateCinematicSpin(winningNumber, options = {}) {
   if (!validationPassed) {
@@ -91,6 +92,6 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
 export function getAnimationStatus() {
   return {
     available: validationPassed,
-    mode: validationPassed ? 'CINEMATIC_3D' : 'DISABLED'
+    mode: validationPassed ? 'CINEMATIC_V2_NEUQUANT' : 'DISABLED'
   };
 }
