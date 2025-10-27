@@ -1,7 +1,9 @@
 import { Client, Collection, Events, GatewayIntentBits, MessageFlags, REST, Routes } from 'discord.js';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
-import { readdirSync } from 'fs';
+import { readdirSync, existsSync } from 'fs';
+import { createRequire } from 'module';
+import { spawn } from 'child_process';
 import prisma, { initializeDatabase } from './db/index.js';
 import { initLogger } from './lib/logger.js';
 import { handleBattleComponent, handleBattleSelect, isBattleInteraction } from './commands/battle.js';
@@ -10,17 +12,166 @@ import { handleRouletteButton } from './commands/roulette.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
 import { logger } from './logger.js';
-import {
-  handleGiveawayButton,
-  initGiveaways,
-  isGiveawayButton,
-} from './features/giveaways/router.js';
 import { runStartupValidation } from './utils/startup-validator.js';
 import { validateCinematicAnimation, getAnimationStatus } from './roulette/safe-animation.js';
 
 // ES modules dirname fix
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const projectRoot = join(__dirname, '..');
+const distSrcDir = join(projectRoot, 'dist', 'src');
+
+let typescriptBuildPromise = null;
+
+async function ensureTypescriptBuild() {
+  const giveawayOutput = join(distSrcDir, 'features', 'giveaways', 'router.js');
+  if (existsSync(giveawayOutput)) {
+    return true;
+  }
+
+  if (typescriptBuildPromise) {
+    return typescriptBuildPromise;
+  }
+
+  typescriptBuildPromise = (async () => {
+    let tscPath;
+    try {
+      const moduleRequire = createRequire(import.meta.url);
+      tscPath = moduleRequire.resolve('typescript/bin/tsc');
+    } catch (error) {
+      logger.warn('TypeScript runtime compiler unavailable; skipping build', { err: error });
+      return false;
+    }
+
+    logger.info('Compiling TypeScript sources for runtime support...');
+
+    const args = [tscPath, '--project', join(projectRoot, 'tsconfig.json')];
+    const child = spawn(process.execPath, args, { cwd: projectRoot });
+
+    let stdout = '';
+    let stderr = '';
+
+    if (child.stdout) {
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString();
+      });
+    }
+
+    if (child.stderr) {
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString();
+      });
+    }
+
+    const exitCode = await new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.on('exit', (code) => resolve(code ?? 1));
+    });
+
+    if (exitCode !== 0) {
+      throw new Error(`tsc exited with code ${exitCode}${stderr ? `: ${stderr.trim()}` : ''}`);
+    }
+
+    if (stdout.trim()) {
+      logger.info('TypeScript compiler output', { output: stdout.trim() });
+    }
+
+    return true;
+  })().catch((error) => {
+    logger.error('failed to compile TypeScript sources for runtime', { err: error });
+    return false;
+  });
+
+  return typescriptBuildPromise;
+}
+
+function createUnavailableGiveawayHandlers() {
+  return {
+    initGiveaways() {
+      logger.warn('Giveaway module unavailable during initialization; skipping setup.');
+    },
+    isGiveawayButton() {
+      return false;
+    },
+    async handleGiveawayButton(interaction) {
+      if (interaction.replied || interaction.deferred) {
+        return;
+      }
+
+      try {
+        await interaction.reply({
+          content: 'Giveaway system is not available right now.',
+          flags: MessageFlags.Ephemeral,
+        });
+      } catch (error) {
+        logger.warn('failed to send unavailable giveaway response', { err: error });
+      }
+    },
+  };
+}
+
+let giveawayHandlers = createUnavailableGiveawayHandlers();
+let giveawaysLoaded = false;
+let giveawayModuleSource = null;
+
+function updateGiveawayHandlers(module, sourcePath) {
+  const initFn = module?.initGiveaways;
+  const handleFn = module?.handleGiveawayButton;
+  const isButtonFn = module?.isGiveawayButton;
+
+  if (typeof initFn === 'function' && typeof handleFn === 'function' && typeof isButtonFn === 'function') {
+    giveawayHandlers = {
+      initGiveaways: initFn,
+      handleGiveawayButton: handleFn,
+      isGiveawayButton: isButtonFn,
+    };
+    giveawaysLoaded = true;
+    giveawayModuleSource = sourcePath;
+    logger.info('Giveaway module loaded', { source: sourcePath });
+  } else {
+    logger.warn('Giveaway module missing required exports', { source: sourcePath });
+  }
+}
+
+async function loadGiveawayHandlers() {
+  const localJs = join(__dirname, 'features', 'giveaways', 'router.js');
+  if (existsSync(localJs)) {
+    const module = await import(pathToFileURL(localJs).href);
+    updateGiveawayHandlers(module, localJs);
+    return;
+  }
+
+  const distJs = join(distSrcDir, 'features', 'giveaways', 'router.js');
+  if (existsSync(distJs)) {
+    const module = await import(pathToFileURL(distJs).href);
+    updateGiveawayHandlers(module, distJs);
+    return;
+  }
+
+  const tsSource = join(__dirname, 'features', 'giveaways', 'router.ts');
+  if (!existsSync(tsSource)) {
+    logger.warn('Giveaway system disabled: router module not found.');
+    return;
+  }
+
+  const built = await ensureTypescriptBuild();
+  if (!built) {
+    logger.warn('Giveaway system disabled: TypeScript build failed.');
+    return;
+  }
+
+  if (existsSync(distJs)) {
+    const module = await import(pathToFileURL(distJs).href);
+    updateGiveawayHandlers(module, distJs);
+    return;
+  }
+
+  logger.warn('Giveaway system disabled: compiled router module missing after build.', {
+    path: distJs,
+  });
+}
+
+const giveawayModuleReady = loadGiveawayHandlers();
 
 // Create Discord client
 const client = new Client({
@@ -44,7 +195,33 @@ async function loadCommands() {
 
   for (const file of commandFiles) {
     const filePath = join(commandsPath, file);
-    const command = await import(`file://${filePath}`);
+    let command;
+
+    try {
+      if (file.endsWith('.js')) {
+        command = await import(pathToFileURL(filePath).href);
+      } else if (file.endsWith('.ts')) {
+        const built = await ensureTypescriptBuild();
+        if (!built) {
+          logger.warn('Skipping TypeScript command due to build failure', { file });
+          continue;
+        }
+
+        const compiledPath = join(distSrcDir, 'commands', file.replace(/\.ts$/, '.js'));
+        if (!existsSync(compiledPath)) {
+          logger.warn('Compiled command not found after build', { file, compiledPath });
+          continue;
+        }
+
+        command = await import(pathToFileURL(compiledPath).href);
+      } else {
+        logger.warn('Skipping unsupported command file', { file });
+        continue;
+      }
+    } catch (error) {
+      logger.error('failed to load command module', { file, err: error });
+      continue;
+    }
 
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
@@ -137,7 +314,14 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 
   // Initialize giveaway system
-  initGiveaways(client);
+  await giveawayModuleReady;
+  giveawayHandlers.initGiveaways(client);
+
+  if (!giveawaysLoaded) {
+    logger.warn('Giveaway system not initialized; related commands will be unavailable.');
+  } else if (giveawayModuleSource) {
+    logger.info('Giveaway system initialized', { source: giveawayModuleSource });
+  }
 
   // Initialize logger
   if (process.env.LOG_CHANNEL_ID) {
@@ -200,8 +384,10 @@ client.on('interactionCreate', async (interaction) => {
 
       const customId = interaction.customId ?? '';
 
-      if (isGiveawayButton(customId)) {
-        await handleGiveawayButton(interaction);
+      await giveawayModuleReady;
+
+      if (giveawayHandlers.isGiveawayButton(customId)) {
+        await giveawayHandlers.handleGiveawayButton(interaction);
         return;
       }
 
