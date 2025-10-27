@@ -178,7 +178,8 @@ async function spinWheel(interaction, state) {
   }
 
   // Remove the game from active games
-  ACTIVE_ROULETTE.delete(state.commandId);
+  const commandId = interaction.customId.split('_')[2]; // Extract commandId from button
+  ACTIVE_ROULETTE.delete(commandId);
 
   const updateFrame = async ({ frame, caption }) => {
     await interaction.editReply({
@@ -381,7 +382,8 @@ async function processResults(interaction, state, pocket) {
 
 async function updateRouletteUI(interaction, state) {
   const embed = createRoulettePromptEmbed(state.displayName, state.amount, state.bets);
-  const components = createBettingButtons(state.commandId, state.selectedChip);
+  const commandId = interaction.customId.split('_')[2]; // Extract commandId from button
+  const components = createBettingButtons(commandId, state.selectedChip);
 
   await interaction.editReply({
     embeds: [embed],
