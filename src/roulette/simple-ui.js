@@ -93,46 +93,29 @@ function formatBetName(betType) {
  * Create loading embed shown while generating the spin animation
  */
 export function createLoadingSpinEmbed(displayName, totalBet) {
-  // Create animated progress bar
-  const progressBar = '▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱'; // 75% filled
-  const spinner = '🎰';
-  
   return new EmbedBuilder()
     .setColor(0x00FF88) // GUHD EATS neon green
-    .setTitle(`${spinner} Generating Your Personalized Roulette Spin`)
+    .setTitle('🎰 Getting the Table Ready...')
     .setDescription(
-      '╔═══════════════════════════════════════╗\n' +
-      '║  ✨ **CRAFTING UNIQUE EXPERIENCE** ✨  ║\n' +
-      '╚═══════════════════════════════════════╝\n\n' +
-      '**🎬 Animation Rendering**\n' +
-      `\`${progressBar}\` 75%\n\n` +
-      '**🎯 Calculating Physics**\n' +
-      '▸ Random spin trajectory\n' +
-      '▸ Ball deceleration curve\n' +
-      '▸ Landing position\n\n' +
-      '**⚡ Optimizing Quality**\n' +
-      '▸ 15 FPS @ 350x350\n' +
-      '▸ ~158 frames\n' +
-      '▸ Target: <2.8MB'
+      '✨ **Preparing your personalized roulette spin**\n\n' +
+      '🎡 Setting up the wheel...\n' +
+      '🎲 Calculating physics...\n' +
+      '⚡ Rendering animation...\n\n' +
+      '_Please wait a moment..._'
     )
     .addFields(
       {
         name: '👤 Player',
-        value: `\`${displayName}\``,
+        value: displayName,
         inline: true
       },
       {
-        name: '💰 Total Bet',
-        value: `**${formatVP(totalBet)} VP**`,
-        inline: true
-      },
-      {
-        name: '⏱️ Est. Time',
-        value: '`~1-2 seconds`',
+        name: '💰 Bet',
+        value: formatVP(totalBet),
         inline: true
       }
     )
-    .setFooter({ text: '🎰 GUHD EATS Roulette • Every spin is uniquely randomized!' })
+    .setFooter({ text: 'GUHD EATS Roulette' })
     .setTimestamp();
 }
 

@@ -233,11 +233,11 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   }
 
   const {
-    width = 350,      // ULTRA compression for guaranteed <3MB
-    height = 350,
+    width = 320,      // Reduced to ensure <3MB with longer duration
+    height = 320,
     duration = 10500, // 10.5 seconds (longer for smooth animation + 3s rest)
-    fps = 15,         // 15 FPS (smoother animation, still fast encoding)
-    quality = 6       // 6 = slightly better compression speed, still small
+    fps = 14,         // 14 FPS (smooth, smaller file size)
+    quality = 8       // 8 = more aggressive compression for safety
   } = options;
 
   const totalFrames = Math.floor((duration / 1000) * fps);
@@ -365,9 +365,12 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
 
     console.log(`✅ GIF Complete: ${sizeMB}MB (${sizeKB}KB) | ${totalFrames} frames | ${encodeTime}s encode | ${fps}fps`);
 
-    if (buffer.length > 3 * 1024 * 1024) {
-      console.error(`❌ CRITICAL: GIF ${sizeMB}MB exceeds Discord 3MB limit!`);
-      throw new Error(`GIF_TOO_LARGE: ${sizeMB}MB exceeds 3MB Discord limit`);
+    // HARD LIMIT: Reject if over 2.9MB (safety margin for Discord's 3MB limit)
+    const MAX_SIZE_BYTES = 2.9 * 1024 * 1024;
+    if (buffer.length > MAX_SIZE_BYTES) {
+      console.error(`❌ CRITICAL: GIF ${sizeMB}MB exceeds 2.9MB safety limit!`);
+      console.error(`   Discord limit is 3MB, using 2.9MB for safety margin`);
+      throw new Error(`GIF_TOO_LARGE: ${sizeMB}MB exceeds safe limit (max 2.9MB)`);
     }
 
     return {
