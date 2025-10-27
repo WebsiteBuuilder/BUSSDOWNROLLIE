@@ -335,9 +335,9 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     
     for (let frame = 0; frame < totalFrames; frame++) {
       try {
-        // TIME-BASED ANIMATION (not progress-based)
+        // TIME-BASED ANIMATION (not progress-based for physics)
         const currentTime = (frame / fps); // Current time in seconds
-        const normalizedTime = currentTime / totalAnimationTime; // For phase detection
+        const progress = frame / totalFrames; // Still needed for other calculations
         
         let wheelRotation, ballAngle, ballRadius, showBall, showResult;
         
