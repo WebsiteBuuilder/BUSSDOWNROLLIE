@@ -290,9 +290,10 @@ async function spinWheel(interaction, state, commandId) {
     const startGen = Date.now();
 
     const result = await generateCinematicSpin(pocket.number, {
-      duration: 10500, // 10.5 seconds (smooth spin + 3s rest)
-      fps: 14,         // 14 FPS (smooth, guaranteed <3MB)
-      quality: 8       // 8 = aggressive compression for safety
+      duration: 8000,  // 8 seconds (physics-based spin + rest)
+      fps: 16,         // 16 FPS (smooth, frame-stable)
+      quality: 10,     // 10 = balanced quality/size
+      debugMode: false // Set to true for physics debugging
     });
 
     const gifBuffer = result.buffer;

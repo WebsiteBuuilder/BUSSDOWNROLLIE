@@ -61,10 +61,29 @@ function easeOutCubic(t) {
 }
 
 /**
- * Quartic easeOut for even smoother deceleration
+ * Rotational kinematics: Calculate angle at time t
+ * angle(t) = initialVelocity * t - 0.5 * deceleration * t^2
  */
-function easeOutQuartic(t) {
-  return 1 - Math.pow(1 - t, 4);
+function calculateRotationAngle(initialVelocity, deceleration, time) {
+  return initialVelocity * time - 0.5 * deceleration * time * time;
+}
+
+/**
+ * Calculate deceleration needed to reach target angle with given initial velocity
+ * Using: finalAngle = initialVelocity * t - 0.5 * deceleration * t^2
+ * And: finalVelocity = 0 = initialVelocity - deceleration * t
+ * Solving: deceleration = 2 * initialVelocity^2 / (2 * finalAngle)
+ */
+function calculateDeceleration(initialVelocity, targetAngle) {
+  return (initialVelocity * initialVelocity) / (2 * targetAngle);
+}
+
+/**
+ * Calculate time to stop given initial velocity and deceleration
+ * finalVelocity = 0 = initialVelocity - deceleration * time
+ */
+function calculateStopTime(initialVelocity, deceleration) {
+  return initialVelocity / deceleration;
 }
 
 /**
@@ -233,11 +252,12 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   }
 
   const {
-    width = 320,      // Reduced to ensure <3MB with longer duration
+    width = 320,      // Optimized for <3MB
     height = 320,
-    duration = 10500, // 10.5 seconds (longer for smooth animation + 3s rest)
-    fps = 14,         // 14 FPS (smooth, smaller file size)
-    quality = 8       // 8 = more aggressive compression for safety
+    duration = 8000,  // 8 seconds total (physics + rest)
+    fps = 16,         // 16 FPS for smooth motion
+    quality = 10,     // Balanced quality
+    debugMode = false // Enable debug logging
   } = options;
 
   const totalFrames = Math.floor((duration / 1000) * fps);
@@ -257,98 +277,128 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     encoder.setRepeat(0);              // Loop forever
     encoder.start();
 
-    // Animation parameters (total 10.5 seconds)
-    const spinDuration = 0.57;    // 57% fast spinning (6s)
-    const slowdownDuration = 0.095; // 9.5% gradual slowdown (1s)
-    const restDuration = 0.285;   // 28.5% ball resting still (3s)
-    const resultDuration = 0.05;  // 5% showing overlay (0.5s)
+    // ===== PHYSICS-BASED ROULETTE SIMULATION =====
     
     // Find winning segment index
     const winningIndex = ROULETTE_NUMBERS.findIndex((s) => s.num === winningNumber);
-    const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
+    if (winningIndex === -1) throw new Error(`Invalid winning number: ${winningNumber}`);
     
-    // FIXED BALL POSITION: Ball always settles at TOP of wheel (12 o'clock) in canvas space
-    const BALL_LANDING_POSITION = -Math.PI / 2; // Top of canvas (pointing up)
+    const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length; // ~9.73° per segment
     
-    // Add random offset within winning segment
-    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.6; // Random within 60% of segment
+    // FIXED: Ball landing position at TOP of canvas (12 o'clock)
+    const BALL_LANDING_POSITION = -Math.PI / 2;
     
-    // Calculate wheel rotation needed to put winning segment under the ball landing position
-    // Segments are drawn starting at angle 0 in wheel space
-    // We need: wheelRotation + (winningIndex * segmentAngle) = BALL_LANDING_POSITION
-    // So: wheelRotation = BALL_LANDING_POSITION - (winningIndex * segmentAngle) + randomOffset
-    const baseTargetAngle = BALL_LANDING_POSITION - (winningIndex * segmentAngle) + randomOffset;
+    // Random offset within winning segment (±30% of segment width)
+    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.6;
     
-    // Add random extra rotations (12-16 full spins)
-    const randomSpins = 12 + Math.random() * 4;
-    const finalWheelRotation = (Math.PI * 2 * randomSpins) + baseTargetAngle;
+    // Calculate exact final wheel angle to align winning segment with ball
+    // Formula: wheelRotation + (winningIndex * segmentAngle) = BALL_LANDING_POSITION + randomOffset
+    const targetSegmentAngle = BALL_LANDING_POSITION - (winningIndex * segmentAngle) + randomOffset;
+    
+    // Add random rotations (8-12 full spins for realism)
+    const randomFullRotations = 8 + Math.random() * 4;
+    const targetWheelAngle = (Math.PI * 2 * randomFullRotations) + targetSegmentAngle;
+    
+    // WHEEL PHYSICS: Rotational kinematics
+    const wheelInitialVelocity = 15 + Math.random() * 5; // rad/s (randomized)
+    const wheelDeceleration = calculateDeceleration(wheelInitialVelocity, targetWheelAngle);
+    const wheelStopTime = calculateStopTime(wheelInitialVelocity, wheelDeceleration);
+    
+    // BALL PHYSICS: Ball spins opposite direction, faster, decelerates quicker
+    const ballInitialVelocity = -wheelInitialVelocity * 1.5; // Opposite direction, 1.5x speed
+    const ballTotalRotations = 15 + Math.random() * 5;
+    const ballTotalAngle = Math.PI * 2 * ballTotalRotations;
+    const ballDeceleration = calculateDeceleration(Math.abs(ballInitialVelocity), ballTotalAngle);
+    const ballStopTime = calculateStopTime(Math.abs(ballInitialVelocity), ballDeceleration);
+    
+    // Animation timing
+    const spinPhaseTime = Math.min(wheelStopTime, ballStopTime); // Until ball stops spinning
+    const dropPhaseTime = 0.5; // Ball drops into pocket
+    const restPhaseTime = 2.5; // Ball rests on winning number
+    const totalAnimationTime = spinPhaseTime + dropPhaseTime + restPhaseTime;
     
     // Ball radius
-    const finalBallRadius = Math.min(width, height) * 0.38;
     const maxBallRadius = Math.min(width, height) * 0.42;
+    const finalBallRadius = Math.min(width, height) * 0.38;
+    
+    // Debug logging
+    if (debugMode) {
+      console.log('🎲 [ROULETTE DEBUG MODE]');
+      console.log(`  Winning Number: ${winningNumber} (index: ${winningIndex})`);
+      console.log(`  Target Wheel Angle: ${(targetWheelAngle * 180 / Math.PI).toFixed(2)}°`);
+      console.log(`  Wheel: v0=${wheelInitialVelocity.toFixed(2)} rad/s, a=${wheelDeceleration.toFixed(2)} rad/s², t=${wheelStopTime.toFixed(2)}s`);
+      console.log(`  Ball: v0=${ballInitialVelocity.toFixed(2)} rad/s, a=${ballDeceleration.toFixed(2)} rad/s², t=${ballStopTime.toFixed(2)}s`);
+      console.log(`  Animation: spin=${spinPhaseTime.toFixed(2)}s, drop=${dropPhaseTime}s, rest=${restPhaseTime}s`);
+    }
 
     let lastLogTime = Date.now();
     
     for (let frame = 0; frame < totalFrames; frame++) {
       try {
-        const progress = frame / totalFrames;
+        // TIME-BASED ANIMATION (not progress-based)
+        const currentTime = (frame / fps); // Current time in seconds
+        const normalizedTime = currentTime / totalAnimationTime; // For phase detection
         
-        // Determine animation phase
-        const isSpinning = progress < spinDuration;
-        const isSlowingDown = progress >= spinDuration && progress < spinDuration + slowdownDuration;
-        const isResting = progress >= spinDuration + slowdownDuration && progress < spinDuration + slowdownDuration + restDuration;
-        const showResult = progress >= spinDuration + slowdownDuration + restDuration;
+        let wheelRotation, ballAngle, ballRadius, showBall, showResult;
         
-        let wheelRotation, ballAngle, ballRadius;
-        
-        if (isSpinning) {
-          // SPINNING PHASE: Wheel and ball both spin
-          const spinProgress = progress / spinDuration;
-          const easedProgress = easeOutQuartic(spinProgress);
+        if (currentTime <= spinPhaseTime) {
+          // ===== SPIN PHASE: Physics-based rotation =====
+          const t = currentTime;
           
-          // Wheel gradually reaches final rotation
-          wheelRotation = easedProgress * finalWheelRotation;
+          // Wheel rotation using kinematic equation: θ = v0*t - 0.5*a*t²
+          wheelRotation = calculateRotationAngle(wheelInitialVelocity, wheelDeceleration, t);
           
-          // Ball spins in opposite direction (clockwise while wheel goes counter-clockwise)
-          // Ball makes many rotations initially, slowing down
-          const initialBallSpeed = 25; // Fast initial rotation
-          const finalBallSpeed = 2;    // Slow final rotation
-          const currentBallSpeed = initialBallSpeed - (initialBallSpeed - finalBallSpeed) * easedProgress;
-          ballAngle = -progress * Math.PI * 2 * currentBallSpeed; // Negative = opposite direction
+          // Ball rotation (opposite direction, faster initial speed)
+          const ballCurrentAngle = calculateRotationAngle(Math.abs(ballInitialVelocity), ballDeceleration, t);
+          ballAngle = -ballCurrentAngle; // Negative for opposite direction
           
-          // Ball spirals inward from outer track to landing position
-          ballRadius = maxBallRadius - easedProgress * (maxBallRadius - finalBallRadius);
+          // Ball spirals inward smoothly
+          const spiralProgress = t / spinPhaseTime;
+          ballRadius = maxBallRadius - (spiralProgress * (maxBallRadius - finalBallRadius));
           
-        } else if (isSlowingDown) {
-          // SLOWDOWN PHASE: Wheel stops, ball settles to landing position
-          const slowdownProgress = (progress - spinDuration) / slowdownDuration;
-          const easeSlowdown = easeOutCubic(slowdownProgress);
+          showBall = true;
+          showResult = false;
           
-          // Wheel is now at final position (stopped)
-          wheelRotation = finalWheelRotation;
+        } else if (currentTime <= spinPhaseTime + dropPhaseTime) {
+          // ===== DROP PHASE: Ball settles into winning pocket =====
+          const dropProgress = (currentTime - spinPhaseTime) / dropPhaseTime;
+          const easedDrop = easeOutCubic(dropProgress);
           
-          // Calculate where ball was at end of spin phase
-          const spinEndSpeed = 2;
-          const ballAngleAtSpinEnd = -spinDuration * Math.PI * 2 * spinEndSpeed;
+          // Wheel is at final position
+          wheelRotation = targetWheelAngle;
           
-          // Ball smoothly moves from its spin-end position to the landing position
-          // We need to find shortest angular path
+          // Ball smoothly moves to landing position
+          const ballAngleAtSpinEnd = -ballTotalAngle;
           let angleDiff = BALL_LANDING_POSITION - ballAngleAtSpinEnd;
-          // Normalize to [-π, π]
+          
+          // Normalize angle difference to shortest path
           while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
           while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
           
-          ballAngle = ballAngleAtSpinEnd + (angleDiff * easeSlowdown);
+          ballAngle = ballAngleAtSpinEnd + (angleDiff * easedDrop);
           ballRadius = finalBallRadius;
           
-        } else {
-          // RESTING PHASE: Everything stopped, ball sitting on winning number
-          wheelRotation = finalWheelRotation;
-          ballAngle = BALL_LANDING_POSITION; // Ball at fixed top position
+          showBall = true;
+          showResult = false;
+          
+        } else if (currentTime <= spinPhaseTime + dropPhaseTime + restPhaseTime) {
+          // ===== REST PHASE: Ball sits on winning number =====
+          wheelRotation = targetWheelAngle;
+          ballAngle = BALL_LANDING_POSITION;
           ballRadius = finalBallRadius;
+          
+          showBall = true;
+          showResult = false;
+          
+        } else {
+          // ===== RESULT PHASE: Show overlay =====
+          wheelRotation = targetWheelAngle;
+          ballAngle = BALL_LANDING_POSITION;
+          ballRadius = finalBallRadius;
+          
+          showBall = false; // Hide ball during result overlay
+          showResult = true;
         }
-        
-        const showBall = !showResult; // Hide ball only during result overlay
 
         // Draw frame
         drawRouletteFrame(
