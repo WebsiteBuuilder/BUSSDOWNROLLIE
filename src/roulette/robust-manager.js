@@ -19,7 +19,7 @@ import {
   animateLiteMode,
   isCanvasAnimationAvailable
 } from './canvas-animation.js';
-import { safeReply } from '../utils/interaction.js';
+import { ackWithin3s, safeReply } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
 import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
