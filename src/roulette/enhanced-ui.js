@@ -215,22 +215,41 @@ export function createResultEmbed({
 }
 
 /**
- * Create betting buttons
+ * Create simplified betting buttons (Discord has a 5 row limit)
  */
 export function createBettingButtons(commandId, selectedChip = 10) {
-  const chipValues = [1, 5, 10, 25, 100, 500];
-  
   // Chip selection row
   const chipRow = new ActionRowBuilder();
-  chipValues.forEach(value => {
-    chipRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`roulette_chip_${commandId}_${value}`)
-        .setLabel(`$${value}`)
-        .setStyle(selectedChip === value ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        .setEmoji('🪙')
-    );
-  });
+  chipRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_chip_${commandId}_1`)
+      .setLabel('$1')
+      .setStyle(selectedChip === 1 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+  chipRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_chip_${commandId}_5`)
+      .setLabel('$5')
+      .setStyle(selectedChip === 5 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+  chipRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_chip_${commandId}_10`)
+      .setLabel('$10')
+      .setStyle(selectedChip === 10 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+  chipRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_chip_${commandId}_25`)
+      .setLabel('$25')
+      .setStyle(selectedChip === 25 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
+  chipRow.addComponents(
+    new ButtonBuilder()
+      .setCustomId(`roulette_chip_${commandId}_100`)
+      .setLabel('$100')
+      .setStyle(selectedChip === 100 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+  );
 
   // Color betting row
   const colorRow = new ActionRowBuilder();
@@ -252,51 +271,21 @@ export function createBettingButtons(commandId, selectedChip = 10) {
       .setLabel('🟢 GREEN')
       .setStyle(ButtonStyle.Success)
   );
-
-  // Number betting rows (1-36)
-  const numberRows = [];
-  for (let row = 0; row < 3; row++) {
-    const numberRow = new ActionRowBuilder();
-    for (let col = 0; col < 12; col++) {
-      const num = row * 12 + col + 1;
-      const color = getNumberColor(num);
-      const style = color === 'red' ? ButtonStyle.Danger : 
-                   color === 'black' ? ButtonStyle.Secondary : 
-                   ButtonStyle.Success;
-      
-      numberRow.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`roulette_bet_${commandId}_number_${num}`)
-          .setLabel(`${num}`)
-          .setStyle(style)
-      );
-    }
-    numberRows.push(numberRow);
-  }
-
-  // Zero row
-  const zeroRow = new ActionRowBuilder();
-  zeroRow.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`roulette_bet_${commandId}_number_0`)
-      .setLabel('0')
-      .setStyle(ButtonStyle.Success)
-  );
-
-  // Outside bets row
-  const outsideRow = new ActionRowBuilder();
-  outsideRow.addComponents(
+  colorRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`roulette_bet_${commandId}_even`)
       .setLabel('EVEN')
       .setStyle(ButtonStyle.Primary)
   );
-  outsideRow.addComponents(
+  colorRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`roulette_bet_${commandId}_odd`)
       .setLabel('ODD')
       .setStyle(ButtonStyle.Primary)
   );
+
+  // Outside bets row
+  const outsideRow = new ActionRowBuilder();
   outsideRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`roulette_bet_${commandId}_1-18`)
@@ -309,22 +298,19 @@ export function createBettingButtons(commandId, selectedChip = 10) {
       .setLabel('19-36')
       .setStyle(ButtonStyle.Primary)
   );
-
-  // Dozens row
-  const dozensRow = new ActionRowBuilder();
-  dozensRow.addComponents(
+  outsideRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`roulette_bet_${commandId}_1st-12`)
       .setLabel('1ST 12')
       .setStyle(ButtonStyle.Primary)
   );
-  dozensRow.addComponents(
+  outsideRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`roulette_bet_${commandId}_2nd-12`)
       .setLabel('2ND 12')
       .setStyle(ButtonStyle.Primary)
   );
-  dozensRow.addComponents(
+  outsideRow.addComponents(
     new ButtonBuilder()
       .setCustomId(`roulette_bet_${commandId}_3rd-12`)
       .setLabel('3RD 12')
@@ -348,15 +334,7 @@ export function createBettingButtons(commandId, selectedChip = 10) {
       .setEmoji('🗑️')
   );
 
-  return [
-    chipRow,
-    colorRow,
-    ...numberRows,
-    zeroRow,
-    outsideRow,
-    dozensRow,
-    actionRow
-  ];
+  return [chipRow, colorRow, outsideRow, actionRow];
 }
 
 /**

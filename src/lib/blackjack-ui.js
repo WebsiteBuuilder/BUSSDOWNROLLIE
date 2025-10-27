@@ -54,7 +54,7 @@ export function createGameUIEmbed(gameState, user, playerValue, dealerShowingVal
   
   const dealerValueText = hasPeeked 
     ? `**Total:** \`${calculateHandValue(gameState.dealerHand)}\``
-    : `**Showing:** \`${dealerShowingValue}\``;
+    : `**Showing:** \`${dealerShowingValue}\` (🂠 hidden)`;
 
   const embed = new EmbedBuilder()
     .setColor(0x2f3136) // Discord dark gray

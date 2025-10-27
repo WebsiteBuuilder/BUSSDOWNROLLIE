@@ -367,7 +367,7 @@ async function showRules(interaction) {
 
 async function showGameUI(interaction, round, gameState, user, hasPeeked = false) {
   const playerValue = calculateHandValue(gameState.playerHand);
-  const dealerShowingValue = calculateHandValue([gameState.dealerHand[0]]);
+  const dealerShowingValue = hasPeeked ? calculateHandValue(gameState.dealerHand) : calculateHandValue([gameState.dealerHand[0]]);
 
   const embed = createGameUIEmbed(gameState, user, playerValue, dealerShowingValue, hasPeeked);
   const row = createActionButtons(round, gameState, user, hasPeeked);
@@ -608,6 +608,12 @@ async function resolveGame(interaction, round, gameState, user, options = {}) {
       await tx.user.update({
         where: { id: user.id },
         data: { vp: { increment: payout } },
+      });
+    } else if (result === 'push') {
+      // For push, return the bet amount
+      await tx.user.update({
+        where: { id: user.id },
+        data: { vp: { increment: gameState.bet } },
       });
     }
   });
