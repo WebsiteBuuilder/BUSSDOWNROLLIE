@@ -5,10 +5,16 @@ import {
   getPocketIndex,
   getWheelOrder
 } from './cinematic-wheel.js';
+import {
+  validateCanvasContext,
+  getCanvasDimensions,
+  withSafeCanvasRender
+} from './safe-canvas-utils.js';
 
 /**
  * Cinematic Roulette Animation System
  * Generates realistic 3D spinning wheel with motion blur, lighting, and confetti
+ * NOW WITH COMPREHENSIVE ERROR HANDLING AND SAFE RENDERING
  */
 
 /**
@@ -80,9 +86,15 @@ function compositeMotionBlur(ctx, frames) {
 /**
  * Generate OPTIMIZED cinematic roulette spin GIF
  * Targets: <3MB, <2s encode time, smooth 60-75 frames
+ * NOW WITH COMPREHENSIVE ERROR HANDLING
  */
 export async function generateCinematicSpin(winningNumber, options = {}) {
   const startTime = Date.now();
+  
+  // Validate winning number
+  if (typeof winningNumber !== 'number' || winningNumber < 0 || winningNumber > 36) {
+    throw new Error(`Invalid winning number: ${winningNumber} (must be 0-36)`);
+  }
   
   const {
     duration = 3500,  // Reduced from 4000ms
@@ -93,15 +105,28 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   } = options;
 
   const frames = Math.floor((duration / 1000) * fps);
-  const encoder = new GIFEncoder(width, height);
   
-  console.log(`🎬 [OPTIMIZED] Generating spin for #${winningNumber} (${frames} frames @ ${fps}fps, ${width}x${height})`);
+  // Validate parameters
+  if (frames < 10 || frames > 200) {
+    throw new Error(`Invalid frame count: ${frames} (must be 10-200)`);
+  }
   
-  encoder.start();
-  encoder.setRepeat(0); // Play once
-  encoder.setDelay(1000 / fps);
-  encoder.setQuality(quality);
-  encoder.setTransparent(0x000000);
+  let encoder;
+  
+  try {
+    encoder = new GIFEncoder(width, height);
+    
+    console.log(`🎬 [OPTIMIZED] Generating spin for #${winningNumber} (${frames} frames @ ${fps}fps, ${width}x${height})`);
+    
+    encoder.start();
+    encoder.setRepeat(0); // Play once
+    encoder.setDelay(1000 / fps);
+    encoder.setQuality(quality);
+    encoder.setTransparent(0x000000);
+  } catch (error) {
+    console.error('❌ Failed to initialize GIF encoder:', error);
+    throw new Error(`GIF encoder initialization failed: ${error.message}`);
+  }
 
   // Calculate physics
   const targetAngle = getWinningAngle(winningNumber);
@@ -113,66 +138,80 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   let lastLogTime = Date.now();
 
   for (let frame = 0; frame < frames; frame++) {
-    const progress = easeOutCubic(frame / frames);
-    const angle = (totalRotations * 2 * Math.PI * progress) + targetAngle;
-    const speed = calculateSpeed(frame, frames);
-    
-    // Determine which effects to show
-    const isSpinning = frame < frames - 15;
-    const showMotionBlur = speed > 0.6 && isSpinning;
-    
-    let finalCanvas;
-    
-    if (showMotionBlur) {
-      // Render with motion blur (only during fast spinning)
-      const { createCanvas } = await import('canvas');
-      const canvas = createCanvas(width, height);
-      const ctx = canvas.getContext('2d');
+    try {
+      const progress = easeOutCubic(frame / frames);
+      const angle = (totalRotations * 2 * Math.PI * progress) + targetAngle;
+      const speed = calculateSpeed(frame, frames);
       
-      const blurFrames = renderMotionBlur(angle, speed, null, width, height);
-      compositeMotionBlur(ctx, blurFrames);
+      // Determine which effects to show
+      const isSpinning = frame < frames - 15;
+      const showMotionBlur = speed > 0.6 && isSpinning;
       
-      finalCanvas = canvas;
-    } else {
-      // Render single frame with all effects
-      const showWinningNumber = frame >= frames - 20;
-      const confettiProgress = frame >= confettiStartFrame 
-        ? (frame - confettiStartFrame) / (frames - confettiStartFrame)
-        : 0;
-      const highlightProgress = frame >= highlightStartFrame
-        ? (frame - highlightStartFrame) / (frames - highlightStartFrame)
-        : 0;
+      let finalCanvas;
       
-      finalCanvas = renderCinematicFrame({
-        width,
-        height,
-        angle,
-        speed,
-        winningNumber: showWinningNumber ? winningNumber : null,
-        showBranding: true,
-        showLighting: !showMotionBlur, // Skip lighting during blur
-        showConfetti: frame >= confettiStartFrame,
-        confettiProgress,
-        showWinningHighlight: frame >= highlightStartFrame,
-        highlightProgress
-      });
+      if (showMotionBlur) {
+        // Render with motion blur (only during fast spinning)
+        const { createCanvas } = await import('canvas');
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        
+        validateCanvasContext(ctx);
+        
+        const blurFrames = renderMotionBlur(angle, speed, null, width, height);
+        compositeMotionBlur(ctx, blurFrames);
+        
+        finalCanvas = canvas;
+      } else {
+        // Render single frame with all effects
+        const showWinningNumber = frame >= frames - 20;
+        const confettiProgress = frame >= confettiStartFrame 
+          ? (frame - confettiStartFrame) / (frames - confettiStartFrame)
+          : 0;
+        const highlightProgress = frame >= highlightStartFrame
+          ? (frame - highlightStartFrame) / (frames - highlightStartFrame)
+          : 0;
+        
+        finalCanvas = renderCinematicFrame({
+          width,
+          height,
+          angle,
+          speed,
+          winningNumber: showWinningNumber ? winningNumber : null,
+          showBranding: true,
+          showLighting: !showMotionBlur, // Skip lighting during blur
+          showConfetti: frame >= confettiStartFrame,
+          confettiProgress,
+          showWinningHighlight: frame >= highlightStartFrame,
+          highlightProgress
+        });
+      }
+      
+      // Validate canvas before adding frame
+      if (!finalCanvas) {
+        throw new Error(`Frame ${frame} rendered null canvas`);
+      }
+      
+      // Add frame to encoder
+      const ctx = finalCanvas.getContext('2d');
+      validateCanvasContext(ctx);
+      encoder.addFrame(ctx);
+      
+      // Optimized progress logging (every 500ms max)
+      const now = Date.now();
+      if (now - lastLogTime >= 500 || frame === frames - 1) {
+        const percent = ((frame / frames) * 100).toFixed(0);
+        const elapsed = ((now - startTime) / 1000).toFixed(1);
+        console.log(`  🎞️  ${percent}% | Frame ${frame}/${frames} | ${elapsed}s elapsed`);
+        lastLogTime = now;
+      }
+      
+      // Clear canvas for memory
+      finalCanvas = null;
+      
+    } catch (frameError) {
+      console.error(`❌ Error rendering frame ${frame}:`, frameError.message);
+      throw new Error(`Frame ${frame} render failed: ${frameError.message}`);
     }
-    
-    // Add frame to encoder
-    const ctx = finalCanvas.getContext('2d');
-    encoder.addFrame(ctx);
-    
-    // Optimized progress logging (every 500ms max)
-    const now = Date.now();
-    if (now - lastLogTime >= 500 || frame === frames - 1) {
-      const percent = ((frame / frames) * 100).toFixed(0);
-      const elapsed = ((now - startTime) / 1000).toFixed(1);
-      console.log(`  🎞️  ${percent}% | Frame ${frame}/${frames} | ${elapsed}s elapsed`);
-      lastLogTime = now;
-    }
-    
-    // Clear canvas for memory
-    finalCanvas = null;
   }
 
   encoder.finish();

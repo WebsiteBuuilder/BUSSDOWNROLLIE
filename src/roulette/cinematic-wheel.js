@@ -103,7 +103,7 @@ export function drawDepthShadow(ctx, centerX, centerY, radius) {
 /**
  * Draw wheel segments with 3D perspective
  */
-function drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber = null) {
+function drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber = null, canvasHeight = 600) {
   const pocketCount = WHEEL_ORDER.length;
   const anglePerPocket = (Math.PI * 2) / pocketCount;
   
@@ -123,7 +123,7 @@ function drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angl
     const innerY1 = Math.sin(startAngle) * innerRadius;
     const innerY2 = Math.sin(endAngle) * innerRadius;
     
-    const scale = getDepthScale(centerY + outerY1, height);
+    const scale = getDepthScale(centerY + outerY1, canvasHeight);
     
     // Draw pocket with perspective
     ctx.beginPath();
@@ -167,7 +167,7 @@ function drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angl
 /**
  * Draw numbers on wheel with 3D perspective
  */
-function drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber = null) {
+function drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber = null, canvasWidth = 600, canvasHeight = 600) {
   const pocketCount = WHEEL_ORDER.length;
   const anglePerPocket = (Math.PI * 2) / pocketCount;
   const textRadius = (outerRadius + innerRadius) / 2;
@@ -183,7 +183,7 @@ function drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, win
     const textX = Math.cos(midAngle) * textRadius;
     const textY = Math.sin(midAngle) * textRadius * PERSPECTIVE_FACTOR;
     
-    const scale = getDepthScale(centerY + textY, height);
+    const scale = getDepthScale(centerY + textY, canvasHeight);
     
     ctx.save();
     ctx.translate(textX, textY);
@@ -192,7 +192,7 @@ function drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, win
     
     ctx.fillStyle = COLORS.white;
     // Scale font size to canvas
-    const fontSize = Math.floor(20 * (width / 800));
+    const fontSize = Math.floor(20 * (canvasWidth / 800));
     ctx.font = `bold ${fontSize}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -443,8 +443,8 @@ export function renderCinematicFrame(options = {}) {
   // Draw layers
   drawBackground(ctx, width, height);
   drawDepthShadow(ctx, centerX, centerY, outerRadius);
-  drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber);
-  drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber);
+  drawWheelSegments(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber, height);
+  drawNumbers(ctx, centerX, centerY, outerRadius, innerRadius, angle, winningNumber, width, height);
   drawOuterBorder(ctx, centerX, centerY, outerRadius + 10);
   
   if (showLighting) {

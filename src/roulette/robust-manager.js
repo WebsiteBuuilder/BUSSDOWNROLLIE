@@ -15,6 +15,10 @@ import {
   validateCinematicAnimation,
   getAnimationStatus 
 } from './safe-animation.js';
+import {
+  generateStaticRouletteImage,
+  getEmergencyFallbackMessage
+} from './safe-canvas-utils.js';
 import { AttachmentBuilder } from 'discord.js';
 import { safeReply, ackWithin3s } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
@@ -318,40 +322,16 @@ async function spinWheel(interaction, state, commandId) {
     console.error('❌ Cinematic animation failed - attempting STATIC FALLBACK');
     console.error(`   Error: ${cinematicError.message}`);
     
-    // FALLBACK: Generate static result PNG instead
+    // FALLBACK 1: Generate static result PNG
     try {
-      const { createCanvas } = await import('canvas');
-      const { renderCinematicFrame, getWheelOrder } = await import('./cinematic-wheel.js');
-      
-      // Calculate winning angle
-      const wheelOrder = getWheelOrder();
-      const pocketIndex = wheelOrder.indexOf(pocket.number);
-      const anglePerPocket = (Math.PI * 2) / wheelOrder.length;
-      const winningAngle = -(pocketIndex * anglePerPocket) + (Math.PI / 2);
-      
-      // Render static frame showing result
-      const staticCanvas = renderCinematicFrame({
-        width: 600,
-        height: 600,
-        angle: winningAngle,
-        speed: 0,
-        winningNumber: pocket.number,
-        showBranding: true,
-        showLighting: false,
-        showConfetti: true,
-        confettiProgress: 0.6,
-        showWinningHighlight: true,
-        highlightProgress: 1
-      });
-      
-      const pngBuffer = staticCanvas.toBuffer('image/png');
+      const pngBuffer = await generateStaticRouletteImage(pocket.number);
       const attachment = new AttachmentBuilder(pngBuffer, { 
         name: 'roulette-result.png',
-        description: `Roulette Result - Number ${pocket.number}`
+        description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
       });
       
       await spinMessage.edit({
-        content: `🎡 **Spinning the wheel...**\n\n_Animation unavailable - showing static result_`,
+        content: `🎡 **STILL GUUHHHD ROULETTE**\n\n✨ _The wheel has stopped!_ ✨`,
         embeds: [],
         files: [attachment],
         components: []
@@ -359,29 +339,48 @@ async function spinWheel(interaction, state, commandId) {
       
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      console.log('✅ Static fallback displayed successfully');
+      console.log('✅ Static PNG fallback displayed successfully');
       animationSuccess = true;
       
     } catch (fallbackError) {
-      console.error('❌ CRITICAL: Both animation AND fallback failed');
+      console.error('❌ Static PNG fallback also failed - attempting TEXT FALLBACK');
       console.error(`   Fallback Error: ${fallbackError.message}`);
       
-      // Last resort: Refund and show error
-      if (state.totalBet > 0) {
-        await addVP(state.userId, state.totalBet);
-        console.log(`💰 Refunded ${state.totalBet} VP to user ${state.userId}`);
+      // FALLBACK 2: Text-only emergency fallback
+      try {
+        const emergencyMessage = getEmergencyFallbackMessage(pocket.number);
+        
+        await spinMessage.edit({
+          ...emergencyMessage,
+          components: []
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        console.log('✅ Emergency text fallback displayed successfully');
+        animationSuccess = true;
+        
+      } catch (emergencyError) {
+        console.error('❌ CRITICAL: All fallbacks failed (GIF, PNG, TEXT)');
+        console.error(`   Emergency Error: ${emergencyError.message}`);
+        
+        // Last resort: Refund and show error
+        if (state.totalBet > 0) {
+          await addVP(state.userId, state.totalBet);
+          console.log(`💰 Refunded ${state.totalBet} VP to user ${state.userId}`);
+        }
+        
+        await spinMessage.edit({
+          content: '❌ **Roulette Animation System Error**\n\n' +
+                   'The wheel renderer encountered a critical error.\n\n' +
+                   `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
+                   '⚠️ This is a system issue. Please contact an administrator.',
+          embeds: [],
+          components: []
+        });
+        
+        return; // Exit early, don't show results
       }
-      
-      await spinMessage.edit({
-        content: '❌ **Roulette Animation System Error**\n\n' +
-                 'The wheel renderer encountered a critical error.\n\n' +
-                 `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
-                 '⚠️ This is a system issue. Please contact an administrator.',
-        embeds: [],
-        components: []
-      });
-      
-      return; // Exit early, don't show results
     }
   }
 
