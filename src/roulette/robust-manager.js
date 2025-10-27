@@ -2,7 +2,8 @@ import { MessageFlags } from 'discord.js';
 import { getOrCreateUser, removeVP, addVP } from '../db/index.js';
 import { 
   createRoulettePromptEmbed, 
-  createSpinEmbed, 
+  createSpinEmbed,
+  createCinematicSpinEmbed,
   createResultEmbed, 
   createBettingButtons,
   createRouletteRulesEmbed,
@@ -14,19 +15,15 @@ import {
   createLobbyButtons,
   createDetailedRulesEmbed
 } from './lobby-ui.js';
-import {
-  animateRouletteWithUpdates,
-  animateLiteMode,
-  isCanvasAnimationAvailable
-} from './canvas-animation.js';
-import { ackWithin3s, safeReply } from '../utils/interaction.js';
+import { generateCinematicSpin, animateLiteMode } from './cinematic-animation.js';
+import { AttachmentBuilder } from 'discord.js';
+import { safeReply } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
 import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
 
 const ACTIVE_ROULETTE = new Map();
-const USE_CANVAS_ANIMATION = process.env.CANVAS_ANIMATION !== 'false';
-const CANVAS_ANIMATION_READY = isCanvasAnimationAvailable();
+const USE_CINEMATIC_ANIMATION = true; // Toggle between cinematic and lite mode
 
 const PAYOUTS = {
   'red': 2,
@@ -348,22 +345,39 @@ async function spinWheel(interaction, state, commandId) {
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
+<<<<<<< HEAD
   // Animate the wheel
   if (USE_CANVAS_ANIMATION && CANVAS_ANIMATION_READY) {
+=======
+  // Animate the wheel with cinematic effects
+  if (USE_CINEMATIC_ANIMATION) {
+>>>>>>> e49b467 (Implement cinematic 3D roulette animation with realistic physics and GUHD EATS branding)
     try {
-      await animateRouletteWithUpdates(
-        async (imageUrl, attachment, caption) => {
-          await interaction.editReply({
-            embeds: [createSpinEmbed(state.displayName, '', caption, state.totalBet, imageUrl)],
-            files: [attachment],
-            components: [],
-          });
-        },
-        pocket.number,
-        8000
-      );
-    } catch (canvasError) {
-      console.error('❌ Canvas animation failed, falling back to lite mode:', canvasError);
+      console.log(`🎬 Generating cinematic spin animation...`);
+      
+      const gifBuffer = await generateCinematicSpin(pocket.number, {
+        duration: 4000,
+        fps: 30,
+        quality: 10
+      });
+      
+      const attachment = new AttachmentBuilder(gifBuffer, { 
+        name: 'roulette-spin.gif',
+        description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
+      });
+
+      // Show cinematic spinning animation
+      await interaction.editReply({
+        embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
+        files: [attachment],
+        components: []
+      });
+
+      // Wait for animation to complete
+      await new Promise(resolve => setTimeout(resolve, 4000));
+      
+    } catch (cinematicError) {
+      console.error('❌ Cinematic animation failed, falling back to lite mode:', cinematicError);
       // Fallback to lite mode
       await animateLiteMode(
         async (frame, caption) => {
@@ -376,9 +390,13 @@ async function spinWheel(interaction, state, commandId) {
       );
     }
   } else {
+<<<<<<< HEAD
     if (USE_CANVAS_ANIMATION && !CANVAS_ANIMATION_READY) {
       console.warn('⚠️ Canvas animation requested but dependencies are missing. Using lite mode instead.');
     }
+=======
+    // Use lite mode animation
+>>>>>>> e49b467 (Implement cinematic 3D roulette animation with realistic physics and GUHD EATS branding)
     await animateLiteMode(
       async (frame, caption) => {
         await interaction.editReply({

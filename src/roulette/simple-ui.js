@@ -90,6 +90,36 @@ function formatBetName(betType) {
 }
 
 /**
+ * Create cinematic spin embed for GUHD EATS roulette
+ */
+export function createCinematicSpinEmbed(displayName, totalBet) {
+  return new EmbedBuilder()
+    .setColor(0x00FF75) // GUHD EATS neon green
+    .setTitle('🎰 **STILL GUUHHHD ROULETTE**')
+    .setDescription('✨ *The wheel is spinning with cinematic realism...* ✨\n\n🎡 **3D Perspective Animation** • 💫 **Motion Blur** • 🌟 **Lighting Effects**')
+    .addFields(
+      {
+        name: '👤 Player',
+        value: displayName,
+        inline: true
+      },
+      {
+        name: '💰 Total Bet',
+        value: `${formatVP(totalBet)} VP`,
+        inline: true
+      },
+      {
+        name: '🎬 Animation',
+        value: 'Watch the wheel spin below!',
+        inline: false
+      }
+    )
+    .setFooter({ text: 'Powered by GUHD EATS • STILL GUUHHHD 🎰' })
+    .setTimestamp()
+    .setImage('attachment://roulette-spin.gif');
+}
+
+/**
  * Create spin animation embed (supports image or text frame)
  */
 export function createSpinEmbed(displayName, frame, caption, totalBet, imageUrl = null) {
