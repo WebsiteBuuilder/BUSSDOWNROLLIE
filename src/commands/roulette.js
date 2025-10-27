@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { startRoulette, handleRouletteButton, showRouletteRules } from '../roulette/simple-manager.js';
+import { startRoulette, handleRouletteButton, showRouletteRules } from '../roulette/robust-manager.js';
 import { safeReply } from '../utils/interaction.js';
 
 export const data = new SlashCommandBuilder()
