@@ -14,14 +14,19 @@ import {
   createLobbyButtons,
   createDetailedRulesEmbed
 } from './lobby-ui.js';
-import { animateRouletteWithUpdates, animateLiteMode } from './canvas-animation.js';
+import {
+  animateRouletteWithUpdates,
+  animateLiteMode,
+  isCanvasAnimationAvailable
+} from './canvas-animation.js';
 import { safeReply } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
 import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
 
 const ACTIVE_ROULETTE = new Map();
-const USE_CANVAS_ANIMATION = true; // Toggle between canvas and lite mode
+const USE_CANVAS_ANIMATION = process.env.CANVAS_ANIMATION !== 'false';
+const CANVAS_ANIMATION_READY = isCanvasAnimationAvailable();
 
 const PAYOUTS = {
   'red': 2,
@@ -148,75 +153,62 @@ export async function handleRouletteButton(interaction) {
   });
 
   try {
-<<<<<<< HEAD
-    const [, action, commandIdOrUserId, ...params] = customId.split('_');
-
-    // Handle lobby actions
-    if (action === 'join') {
-      await startGame(interaction, commandIdOrUserId);
-      return true;
-    }
-
-    if (action === 'viewrules') {
-      await interaction.followUp({ 
-        ephemeral: true, 
-        embeds: [createDetailedRulesEmbed()] 
-      });
-      return true;
-    }
-
-    if (action === 'refresh') {
-      const user = await getOrCreateUser(interaction.user.id);
-      const displayName = formatDisplayName(interaction);
-      await interaction.editReply({
-        embeds: [createLobbyEmbed(user, displayName)],
-        components: createLobbyButtons(commandIdOrUserId, user.vp >= 1)
-      });
-      return true;
-    }
-
-    // Handle play again / back to lobby
-    if (action === 'playagain') {
-      await showLobby(interaction);
-      return true;
-    }
-
-    if (action === 'backtolobby') {
-      await showLobby(interaction);
-      return true;
-    }
-
-    // Handle betting actions
-    const state = ACTIVE_ROULETTE.get(commandIdOrUserId);
-
-    if (!state) {
-      console.log(`⚠️ No active roulette game found for commandId: ${commandIdOrUserId}`);
-      
-      if (!interaction.replied) {
-        await interaction.followUp({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
-      }
-=======
-    const [, action, commandId, ...rawParams] = customId.split('_');
+    const [, action, commandIdOrUserId, ...rawParams] = customId.split('_');
     const params = rawParams.filter(Boolean);
+
+    switch (action) {
+      case 'join': {
+        await startGame(interaction, commandIdOrUserId);
+        return true;
+      }
+
+      case 'viewrules': {
+        await interaction.followUp({
+          ephemeral: true,
+          embeds: [createDetailedRulesEmbed()]
+        });
+        return true;
+      }
+
+      case 'refresh': {
+        const user = await getOrCreateUser(interaction.user.id);
+        const displayName = formatDisplayName(interaction);
+        await interaction.editReply({
+          embeds: [createLobbyEmbed(user, displayName)],
+          components: createLobbyButtons(commandIdOrUserId, user.vp >= 1)
+        });
+        return true;
+      }
+
+      case 'playagain':
+      case 'backtolobby': {
+        await showLobby(interaction);
+        return true;
+      }
+      default:
+        break;
+    }
+
+    const commandId = commandIdOrUserId;
     const state = ACTIVE_ROULETTE.get(commandId);
 
     if (!state) {
       console.log(`⚠️ No active roulette game found for commandId: ${commandId}`);
-      await interaction.reply({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
->>>>>>> 3af851da18f9a50dd8c487327f50143fb06677af
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.reply({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
+      } else {
+        await interaction.followUp({ ephemeral: true, content: '⏱️ This roulette game is no longer active.' });
+      }
       return true;
     }
 
     if (interaction.user.id !== state.userId) {
       console.log(`⚠️ Unauthorized interaction attempt by ${interaction.user.id} on game owned by ${state.userId}`);
-<<<<<<< HEAD
-      
-      if (!interaction.replied) {
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.reply({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
+      } else {
         await interaction.followUp({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
       }
-=======
-      await interaction.reply({ ephemeral: true, content: '🙅 Only the original player can interact with this game.' });
->>>>>>> 3af851da18f9a50dd8c487327f50143fb06677af
       return true;
     }
 
@@ -229,48 +221,40 @@ export async function handleRouletteButton(interaction) {
     switch (action) {
       case 'chip': {
         const chipValue = parseInt(params[0], 10);
-        state.selectedChip = chipValue;
-        await updateBettingUI(interaction, state, commandIdOrUserId);
-        console.log(`✅ Updated chip selection to ${chipValue} VP`);
+        if (!Number.isNaN(chipValue)) {
+          state.selectedChip = chipValue;
+        }
+        await updateBettingUI(interaction, state, commandId);
+        console.log(`✅ Updated chip selection to ${state.selectedChip} VP`);
         break;
       }
 
       case 'bet': {
         const betType = params.join('_');
-        await placeBet(interaction, state, betType, commandIdOrUserId);
+        await placeBet(interaction, state, betType, commandId);
         break;
       }
 
-<<<<<<< HEAD
-      case 'spin':
-        // Spin the wheel
-        await spinWheel(interaction, state, commandIdOrUserId);
-=======
       case 'spin': {
         await spinWheel(interaction, state, commandId);
->>>>>>> 3af851da18f9a50dd8c487327f50143fb06677af
         break;
       }
 
-<<<<<<< HEAD
-      case 'clear':
-        // Clear all bets and refund VP
+      case 'clear': {
         if (state.totalBet > 0) {
           await addVP(state.userId, state.totalBet);
         }
-=======
-      case 'clear': {
->>>>>>> 3af851da18f9a50dd8c487327f50143fb06677af
         state.bets = {};
         state.totalBet = 0;
-        await updateBettingUI(interaction, state, commandIdOrUserId);
+        await updateBettingUI(interaction, state, commandId);
         console.log(`✅ Cleared all bets for ${interaction.user.username}`);
         break;
       }
 
-      default:
+      default: {
         console.log(`⚠️ Unknown action: ${action}`);
         await interaction.followUp({ ephemeral: true, content: '❌ Unknown action.' });
+      }
     }
   } catch (error) {
     console.error('❌ Roulette button error:', error);
@@ -358,7 +342,7 @@ async function spinWheel(interaction, state, commandId) {
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
   // Animate the wheel
-  if (USE_CANVAS_ANIMATION) {
+  if (USE_CANVAS_ANIMATION && CANVAS_ANIMATION_READY) {
     try {
       await animateRouletteWithUpdates(
         async (imageUrl, attachment, caption) => {
@@ -385,6 +369,9 @@ async function spinWheel(interaction, state, commandId) {
       );
     }
   } else {
+    if (USE_CANVAS_ANIMATION && !CANVAS_ANIMATION_READY) {
+      console.warn('⚠️ Canvas animation requested but dependencies are missing. Using lite mode instead.');
+    }
     await animateLiteMode(
       async (frame, caption) => {
         await interaction.editReply({
