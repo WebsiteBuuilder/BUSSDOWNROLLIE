@@ -252,6 +252,13 @@ async function spinWheel(interaction, state, commandId) {
   // Remove the game from active games
   ACTIVE_ROULETTE.delete(commandId);
 
+  // Immediately acknowledge the interaction with a "Spinning" message
+  const spinMessage = await interaction.editReply({
+    embeds: [createSpinEmbed(state.displayName, state.totalBet)],
+    components: [],
+    files: []
+  });
+
   // Determine winning number
   const primaryBetType = Object.keys(state.bets)[0];
   let betDescriptor = {};
@@ -284,12 +291,13 @@ async function spinWheel(interaction, state, commandId) {
       description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
     });
 
-    await interaction.editReply({
+    await spinMessage.edit({
       embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
       files: [attachment],
       components: []
     });
 
+    // Wait for GIF to play
     await new Promise(resolve => setTimeout(resolve, 4000));
     console.log('✅ Cinematic animation completed successfully');
     
@@ -305,7 +313,7 @@ async function spinWheel(interaction, state, commandId) {
     }
     ACTIVE_ROULETTE.delete(commandId);
     
-    await interaction.editReply({
+    await spinMessage.edit({
       content: '❌ **Roulette Animation System Error**\n\n' +
                'The cinematic wheel renderer encountered a critical error and could not display the animation.\n\n' +
                `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
@@ -357,9 +365,9 @@ async function spinWheel(interaction, state, commandId) {
     newBalance: updatedUser.vp
   });
 
-  await interaction.editReply({ 
+  await spinMessage.edit({ 
     embeds: [resultEmbed], 
-    components: [], // No buttons - simplified flow
+    components: [],
     files: []
   });
 
