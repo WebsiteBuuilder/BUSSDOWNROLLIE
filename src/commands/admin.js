@@ -541,6 +541,20 @@ async function handleDailyChance(interaction) {
           name: 'Previous Odds',
           value: `${(previousChance * 100).toFixed(2)}%`,
           inline: true,
+        },
+        {
+          name: '\u200b',
+          value: '\u200b',
+          inline: false,
+        },
+        {
+          name: '💡 How It Works',
+          value: finalChance > 1.0 
+            ? `At ${(finalChance * 100).toFixed(0)}% chance:\n` +
+              `• Guaranteed: **${Math.floor(finalChance)}x** daily amount\n` +
+              `• Bonus chance: **${((finalChance % 1) * 100).toFixed(0)}%** for +1 more`
+            : 'Standard probability-based outcome',
+          inline: false
         }
       )
       .setFooter({ text: `Admin: ${interaction.user.username}` })

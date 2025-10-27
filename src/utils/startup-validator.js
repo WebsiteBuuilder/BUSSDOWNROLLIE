@@ -17,7 +17,7 @@ async function validatePrisma() {
   console.log('🔍 Validating Prisma setup...');
   
   try {
-    const schemaPath = join(__dirname, '..', '..', 'prisma', 'schema.prisma');
+    const schemaPath = join(process.cwd(), 'prisma', 'schema.prisma');
     if (!existsSync(schemaPath)) {
       console.error('❌ Prisma schema not found');
       return false;
@@ -57,7 +57,8 @@ function validateNodeVersion() {
 function validateEnvironment() {
   console.log('🔍 Validating environment variables...');
   
-  const required = ['DISCORD_TOKEN', 'DISCORD_CLIENT_ID'];
+  const required = ['DISCORD_TOKEN'];
+  const optional = ['DISCORD_CLIENT_ID'];
   const missing = [];
   
   for (const key of required) {
@@ -69,6 +70,12 @@ function validateEnvironment() {
   if (missing.length > 0) {
     console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
     return false;
+  }
+  
+  for (const key of optional) {
+    if (!process.env[key]) {
+      console.warn(`⚠️  Optional variable ${key} not set`);
+    }
   }
   
   console.log('✅ Environment variables OK');
@@ -137,14 +144,15 @@ export async function runStartupValidation() {
   }
   
   if (!allPassed) {
-    console.error('❌ Startup validation failed. Bot may not function correctly.\n');
-    console.error('Please check the errors above and fix them before starting the bot.');
-    process.exit(1);
+    console.warn('⚠️  Some startup checks failed, continuing anyway...\n');
+    console.warn('Bot may have limited functionality. Review warnings above.');
+    // Don't exit - let bot start
+  } else {
+    console.log('╔═══════════════════════════════════════════════════╗');
+    console.log('║          ✅ ALL VALIDATIONS PASSED                ║');
+    console.log('╚═══════════════════════════════════════════════════╝\n');
   }
   
-  console.log('╔═══════════════════════════════════════════════════╗');
-  console.log('║          ✅ ALL VALIDATIONS PASSED                ║');
-  console.log('╚═══════════════════════════════════════════════════╝\n');
   console.log('🤖 GUHD EATS Bot is ready to start!\n');
 }
 

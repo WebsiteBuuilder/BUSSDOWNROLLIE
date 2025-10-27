@@ -43,54 +43,71 @@ export async function execute(interaction) {
     const parsedBaseChance = parseFloat(chanceStr);
     const baseChance = Number.isFinite(parsedBaseChance) ? parsedBaseChance : 0.1;
     const modifier = Number.isFinite(user.dailyChanceModifier) ? user.dailyChanceModifier : 0;
-    const finalChance = Math.max(baseChance + modifier, 0);
+    const totalChance = Math.max(baseChance + modifier, 0);
 
-    // Roll RNG
+    // Calculate guaranteed VP and leftover probability
+    // e.g., 2.35 = 2 guaranteed VP + 35% chance for 3rd VP
+    const guaranteedMultiplier = Math.floor(totalChance);
+    const leftoverChance = totalChance - guaranteedMultiplier;
+
+    // Roll for the leftover probability
     const roll = Math.random();
-    const success = roll < finalChance;
+    const bonusSuccess = roll < leftoverChance;
+
+    // Total VP earned
+    const vpMultiplier = guaranteedMultiplier + (bonusSuccess ? 1 : 0);
+    const success = vpMultiplier > 0;
 
     // Get daily amount from config
     const amountStr = await getConfig('daily_amount', '1');
-    const amount = parseInt(amountStr);
+    const baseAmount = parseInt(amountStr);
+    const totalAmount = baseAmount * vpMultiplier;
 
     // Update user
     const updatedUser = await prisma.user.update({
       where: { id: user.id },
       data: {
         lastDailyAt: new Date(),
-        ...(success && { vp: { increment: amount } }),
+        ...(success && { vp: { increment: totalAmount } }),
       },
     });
 
     // Create embed
-    const embed = new EmbedBuilder().setTimestamp();
-
-    const oddsFields = [
-      { name: 'Final Odds', value: `${(finalChance * 100).toFixed(2)}%`, inline: true },
-      { name: 'Base Odds', value: `${(baseChance * 100).toFixed(2)}%`, inline: true },
-    ];
-
-    if (modifier !== 0) {
-      oddsFields.push({
-        name: 'Modifier',
-        value: `${modifier >= 0 ? '+' : ''}${(modifier * 100).toFixed(2)}%`,
-        inline: true,
-      });
-    }
-
-    if (success) {
-      embed
-        .setColor(0x00ff00)
-        .setTitle('🎉 Daily Claim Success!')
-        .setDescription(`You won **${formatVP(amount)}**!`)
-        .addFields(...oddsFields, { name: 'New Balance', value: formatVP(updatedUser.vp), inline: true });
-    } else {
-      embed
-        .setColor(0xff9900)
-        .setTitle('😔 Daily Claim Failed')
-        .setDescription('Better luck next time!')
-        .addFields(...oddsFields, { name: 'Current Balance', value: formatVP(updatedUser.vp), inline: true });
-    }
+    const embed = new EmbedBuilder()
+      .setColor(success ? 0x00ff00 : 0xff0000)
+      .setTitle(success ? '✅ Daily VP Claimed!' : '❌ Daily Claim Failed')
+      .setDescription(
+        success
+          ? `You received **${totalAmount} VP**!\n\n` +
+            (guaranteedMultiplier > 0 
+              ? `🎯 Guaranteed: **${guaranteedMultiplier}x** (${baseAmount * guaranteedMultiplier} VP)\n`
+              : '') +
+            (bonusSuccess && leftoverChance > 0
+              ? `🎲 Bonus roll: **Success!** (+${baseAmount} VP)\n`
+              : leftoverChance > 0 && !bonusSuccess
+              ? `🎲 Bonus roll: **Failed** (${(leftoverChance * 100).toFixed(1)}% chance)\n`
+              : '') +
+            `💰 New balance: **${updatedUser.vp} VP**`
+          : `Better luck tomorrow! Your daily chance is ${(totalChance * 100).toFixed(1)}%.`
+      )
+      .addFields(
+        {
+          name: '📊 Current Chance',
+          value: `${(totalChance * 100).toFixed(1)}%`,
+          inline: true,
+        },
+        {
+          name: '🎁 Base Reward',
+          value: `${baseAmount} VP`,
+          inline: true,
+        },
+        success && guaranteedMultiplier > 1 ? {
+          name: '⚡ Multiplier',
+          value: `${vpMultiplier}x`,
+          inline: true,
+        } : { name: '\u200b', value: '\u200b', inline: true }
+      )
+      .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
 
@@ -98,7 +115,7 @@ export async function execute(interaction) {
     if (success) {
       await logTransaction('daily', {
         userId: interaction.user.id,
-        amount,
+        amount: totalAmount,
         success: true,
       });
     }

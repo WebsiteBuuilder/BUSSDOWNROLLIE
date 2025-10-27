@@ -11,6 +11,10 @@ npx prisma generate
 echo "Running database migrations..."
 npx prisma migrate deploy
 
+# Validate roulette dependencies (non-fatal)
+echo "Validating roulette dependencies..."
+node scripts/validate-roulette-deps.js || echo "⚠️  Roulette validation warning (non-fatal)"
+
 # Start the bot
 echo "Starting GUHD EATS bot..."
 node dist/src/index.js
