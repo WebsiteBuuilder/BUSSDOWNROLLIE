@@ -400,27 +400,3 @@ export function createRouletteRulesEmbed() {
   return embed;
 }
 
-/**
- * Create "Play Again" button for result screen
- * @param {string} userId - User's Discord ID
- * @returns {Array<ActionRowBuilder>} Button row
- */
-export function createPlayAgainButton(userId) {
-  const row = new ActionRowBuilder();
-  
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`roulette_playagain_${userId}`)
-      .setLabel('🎰 Play Again')
-      .setStyle(ButtonStyle.Success)
-  );
-  
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`roulette_backtolobby_${userId}`)
-      .setLabel('🏠 Back to Lobby')
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  return [row];
-}

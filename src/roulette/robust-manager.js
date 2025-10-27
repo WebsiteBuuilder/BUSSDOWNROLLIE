@@ -7,17 +7,12 @@ import {
   createResultEmbed, 
   createBettingButtons,
   createRouletteRulesEmbed,
-  createPlayAgainButton,
   getNumberColor
 } from './simple-ui.js';
-import {
-  createLobbyEmbed,
-  createLobbyButtons,
-  createDetailedRulesEmbed
-} from './lobby-ui.js';
+import { createDetailedRulesEmbed } from './lobby-ui.js';
 import { generateCinematicSpin, animateLiteMode } from './cinematic-animation.js';
 import { AttachmentBuilder } from 'discord.js';
-import { safeReply } from '../utils/interaction.js';
+import { safeReply, ackWithin3s } from '../utils/interaction.js';
 import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
 import { houseEdgeConfig } from '../config/casino.js';
 import { formatVP } from '../lib/utils.js';
@@ -43,9 +38,9 @@ function formatDisplayName(interaction) {
 }
 
 /**
- * Show lobby screen (entry point for /roulette play)
+ * Start roulette game directly (entry point for /roulette play)
  */
-export async function showLobby(interaction) {
+export async function startRoulette(interaction) {
   try {
     const userId = interaction.user.id;
     const user = await getOrCreateUser(userId);
@@ -58,70 +53,30 @@ export async function showLobby(interaction) {
       return;
     }
 
-    const displayName = formatDisplayName(interaction);
-    const commandId = interaction.id;
-
-    console.log(`🏛️ Showing lobby for user ${userId}`);
-
-    const embed = createLobbyEmbed(user, displayName);
-    const buttons = createLobbyButtons(commandId, user.vp >= 1);
-
-    await interaction.reply({
-      embeds: [embed],
-      components: buttons,
-    });
-
-    // Store lobby state
-    ACTIVE_ROULETTE.set(commandId, {
-      userId,
-      type: 'lobby',
-      displayName
-    });
-
-    console.log(`✅ Lobby displayed for ${displayName}`);
-  } catch (error) {
-    console.error('❌ Error showing lobby:', error);
-    await safeReply(interaction, {
-      content: '❌ Failed to load lobby. Please try again soon.',
-      flags: MessageFlags.Ephemeral,
-    });
-  }
-}
-
-/**
- * Start roulette game from lobby
- */
-async function startGame(interaction, commandId) {
-  try {
-    if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate();
-    }
-
-    const userId = interaction.user.id;
-    const user = await getOrCreateUser(userId);
-
     if (user.vp < 1) {
-      await interaction.followUp({
+      await safeReply(interaction, {
+        content: `❌ You need at least 1 VP to play roulette, but you only have ${formatVP(user.vp)}.`,
         flags: MessageFlags.Ephemeral,
-        content: `❌ You need at least 1 VP to play roulette, but you only have ${formatVP(user.vp)}.`
       });
       return;
     }
 
-    console.log(`🎰 Starting game for user ${userId}`);
-
     const displayName = formatDisplayName(interaction);
-    
-    await interaction.editReply({
+    const commandId = interaction.id;
+
+    console.log(`🎰 Starting roulette for user ${userId}`);
+
+    await interaction.deferReply();
+
+    const message = await interaction.editReply({
       embeds: [createRoulettePromptEmbed(displayName, 0, {}, user.vp)],
       components: createBettingButtons(commandId),
     });
 
     ACTIVE_ROULETTE.set(commandId, {
       userId,
-      type: 'betting',
-      messageId: interaction.message.id,
-      channelId: interaction.channelId,
+      messageId: message.id,
+      channelId: message.channelId,
       displayName,
       vipScore: user.streakDays ?? 0,
       bets: {},
@@ -129,10 +84,13 @@ async function startGame(interaction, commandId) {
       totalBet: 0
     });
 
-    console.log(`✅ Game started for ${displayName}`);
+    console.log(`✅ Roulette game started for ${displayName}`);
   } catch (error) {
-    console.error('❌ Error starting game:', error);
-    await safeReply(interaction, { flags: MessageFlags.Ephemeral, content: '❌ Failed to start game. Please try again.' });
+    console.error('❌ Error starting roulette:', error);
+    await safeReply(interaction, {
+      content: '❌ Failed to start roulette. Please try again soon.',
+      flags: MessageFlags.Ephemeral,
+    });
   }
 }
 
@@ -156,43 +114,6 @@ export async function handleRouletteButton(interaction) {
   try {
     const [, action, commandIdOrUserId, ...rawParams] = customId.split('_');
     const params = rawParams.filter(Boolean);
-
-    switch (action) {
-      case 'join': {
-        await startGame(interaction, commandIdOrUserId);
-        return true;
-      }
-
-      case 'viewrules': {
-        await safeReply(interaction, {
-          flags: MessageFlags.Ephemeral,
-          embeds: [createDetailedRulesEmbed()]
-        });
-        return true;
-      }
-
-      case 'refresh': {
-        if (!interaction.deferred && !interaction.replied) {
-          await interaction.deferUpdate();
-        }
-        const user = await getOrCreateUser(interaction.user.id);
-        const displayName = formatDisplayName(interaction);
-        await interaction.editReply({
-          embeds: [createLobbyEmbed(user, displayName)],
-          components: createLobbyButtons(commandIdOrUserId, user.vp >= 1)
-        });
-        return true;
-      }
-
-      case 'playagain':
-      case 'backtolobby': {
-        await showLobby(interaction);
-        return true;
-      }
-      default:
-        break;
-    }
-
     const commandId = commandIdOrUserId;
     const state = ACTIVE_ROULETTE.get(commandId);
 
@@ -345,13 +266,8 @@ async function spinWheel(interaction, state, commandId) {
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
-<<<<<<< HEAD
-  // Animate the wheel
-  if (USE_CANVAS_ANIMATION && CANVAS_ANIMATION_READY) {
-=======
   // Animate the wheel with cinematic effects
   if (USE_CINEMATIC_ANIMATION) {
->>>>>>> e49b467 (Implement cinematic 3D roulette animation with realistic physics and GUHD EATS branding)
     try {
       console.log(`🎬 Generating cinematic spin animation...`);
       
@@ -390,13 +306,7 @@ async function spinWheel(interaction, state, commandId) {
       );
     }
   } else {
-<<<<<<< HEAD
-    if (USE_CANVAS_ANIMATION && !CANVAS_ANIMATION_READY) {
-      console.warn('⚠️ Canvas animation requested but dependencies are missing. Using lite mode instead.');
-    }
-=======
     // Use lite mode animation
->>>>>>> e49b467 (Implement cinematic 3D roulette animation with realistic physics and GUHD EATS branding)
     await animateLiteMode(
       async (frame, caption) => {
         await interaction.editReply({
@@ -450,7 +360,7 @@ async function spinWheel(interaction, state, commandId) {
 
   await interaction.editReply({ 
     embeds: [resultEmbed], 
-    components: createPlayAgainButton(state.userId),
+    components: [], // No buttons - simplified flow
     files: []
   });
 
