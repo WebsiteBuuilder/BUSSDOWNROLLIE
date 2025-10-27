@@ -61,6 +61,20 @@ function easeOutCubic(t) {
 }
 
 /**
+ * Quartic easeOut for even smoother, more dramatic slowdown
+ */
+function easeOutQuartic(t) {
+  return 1 - Math.pow(1 - t, 4);
+}
+
+/**
+ * Quintic easeOut for ultra-smooth final deceleration
+ */
+function easeOutQuintic(t) {
+  return 1 - Math.pow(1 - t, 5);
+}
+
+/**
  * Rotational kinematics: Calculate angle at time t
  * angle(t) = initialVelocity * t - 0.5 * deceleration * t^2
  */
@@ -254,8 +268,8 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   const {
     width = 320,      // Optimized for <3MB
     height = 320,
-    duration = 8000,  // 8 seconds total (physics + rest)
-    fps = 16,         // 16 FPS for smooth motion
+    duration = 9500,  // 9.5 seconds total (multi-phase smooth animation)
+    fps = 18,         // 18 FPS for smoother motion (171 frames)
     quality = 10,     // Balanced quality
     debugMode = false // Enable debug logging
   } = options;
@@ -299,23 +313,22 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     const randomFullRotations = 8 + Math.random() * 4;
     const targetWheelAngle = (Math.PI * 2 * randomFullRotations) + targetSegmentAngle;
     
-    // WHEEL PHYSICS: Rotational kinematics
-    const wheelInitialVelocity = 15 + Math.random() * 5; // rad/s (randomized)
+    // WHEEL PHYSICS: Rotational kinematics (slower, more realistic)
+    const wheelInitialVelocity = 10 + Math.random() * 3; // rad/s (slower for smoother animation)
     const wheelDeceleration = calculateDeceleration(wheelInitialVelocity, targetWheelAngle);
     const wheelStopTime = calculateStopTime(wheelInitialVelocity, wheelDeceleration);
     
-    // BALL PHYSICS: Ball spins opposite direction, faster, decelerates quicker
-    const ballInitialVelocity = -wheelInitialVelocity * 1.5; // Opposite direction, 1.5x speed
-    const ballTotalRotations = 15 + Math.random() * 5;
+    // BALL PHYSICS: Ball spins opposite direction, slightly faster, with visible slowdown
+    const ballInitialVelocity = -wheelInitialVelocity * 1.1; // Opposite direction, only 1.1x speed (much slower)
+    const ballTotalRotations = 10 + Math.random() * 3; // Fewer rotations for smoother visual
     const ballTotalAngle = Math.PI * 2 * ballTotalRotations;
-    const ballDeceleration = calculateDeceleration(Math.abs(ballInitialVelocity), ballTotalAngle);
-    const ballStopTime = calculateStopTime(Math.abs(ballInitialVelocity), ballDeceleration);
     
-    // Animation timing
-    const spinPhaseTime = Math.min(wheelStopTime, ballStopTime); // Until ball stops spinning
-    const dropPhaseTime = 0.5; // Ball drops into pocket
-    const restPhaseTime = 2.5; // Ball rests on winning number
-    const totalAnimationTime = spinPhaseTime + dropPhaseTime + restPhaseTime;
+    // Animation timing phases (REDESIGNED for smooth deceleration)
+    const fastSpinTime = 3.0;      // Fast spinning phase (constant speed)
+    const slowdownTime = 2.5;      // Visible slowdown phase (dramatic deceleration)
+    const settlingTime = 1.0;      // Ball settles into pocket (ultra-slow)
+    const restPhaseTime = 3.0;     // Ball completely still on winning number
+    const totalAnimationTime = fastSpinTime + slowdownTime + settlingTime + restPhaseTime;
     
     // Ball radius
     const maxBallRadius = Math.min(width, height) * 0.42;
@@ -323,12 +336,13 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     
     // Debug logging
     if (debugMode) {
-      console.log('🎲 [ROULETTE DEBUG MODE]');
+      console.log('🎲 [ROULETTE DEBUG MODE - SMOOTH PHYSICS]');
       console.log(`  Winning Number: ${winningNumber} (index: ${winningIndex})`);
       console.log(`  Target Wheel Angle: ${(targetWheelAngle * 180 / Math.PI).toFixed(2)}°`);
-      console.log(`  Wheel: v0=${wheelInitialVelocity.toFixed(2)} rad/s, a=${wheelDeceleration.toFixed(2)} rad/s², t=${wheelStopTime.toFixed(2)}s`);
-      console.log(`  Ball: v0=${ballInitialVelocity.toFixed(2)} rad/s, a=${ballDeceleration.toFixed(2)} rad/s², t=${ballStopTime.toFixed(2)}s`);
-      console.log(`  Animation: spin=${spinPhaseTime.toFixed(2)}s, drop=${dropPhaseTime}s, rest=${restPhaseTime}s`);
+      console.log(`  Wheel: v0=${wheelInitialVelocity.toFixed(2)} rad/s, a=${wheelDeceleration.toFixed(2)} rad/s²`);
+      console.log(`  Ball: v0=${ballInitialVelocity.toFixed(2)} rad/s (1.1x wheel speed)`);
+      console.log(`  Phases: fast=${fastSpinTime}s, slowdown=${slowdownTime}s, settling=${settlingTime}s, rest=${restPhaseTime}s`);
+      console.log(`  Total: ${totalAnimationTime}s`);
     }
 
     let lastLogTime = Date.now();
@@ -341,48 +355,91 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
         
         let wheelRotation, ballAngle, ballRadius, showBall, showResult;
         
-        if (currentTime <= spinPhaseTime) {
-          // ===== SPIN PHASE: Physics-based rotation =====
+        // Calculate cumulative phase times
+        const fastSpinEnd = fastSpinTime;
+        const slowdownEnd = fastSpinEnd + slowdownTime;
+        const settlingEnd = slowdownEnd + settlingTime;
+        const restEnd = settlingEnd + restPhaseTime;
+        
+        if (currentTime <= fastSpinEnd) {
+          // ===== PHASE 1: FAST SPIN (0-3s) =====
+          // Ball and wheel spin at relatively constant speed
           const t = currentTime;
+          const phaseProgress = t / fastSpinTime;
           
-          // Wheel rotation using kinematic equation: θ = v0*t - 0.5*a*t²
-          wheelRotation = calculateRotationAngle(wheelInitialVelocity, wheelDeceleration, t);
+          // Wheel rotates with physics (smooth deceleration)
+          const wheelProgress = easeOutCubic(phaseProgress);
+          wheelRotation = targetWheelAngle * wheelProgress * 0.4; // 40% of total rotation in fast phase
           
-          // Ball rotation (opposite direction, faster initial speed)
-          const ballCurrentAngle = calculateRotationAngle(Math.abs(ballInitialVelocity), ballDeceleration, t);
-          ballAngle = -ballCurrentAngle; // Negative for opposite direction
+          // Ball rotates opposite direction at 1.1x speed
+          const ballTotalAngleInPhase = ballTotalAngle * 0.5; // 50% of ball rotation in fast phase
+          const ballProgress = phaseProgress;
+          ballAngle = -(ballTotalAngleInPhase * ballProgress);
           
-          // Ball spirals inward smoothly
-          const spiralProgress = t / spinPhaseTime;
-          ballRadius = maxBallRadius - (spiralProgress * (maxBallRadius - finalBallRadius));
+          // Ball spirals inward gently
+          ballRadius = maxBallRadius - (phaseProgress * 0.3 * (maxBallRadius - finalBallRadius));
           
           showBall = true;
           showResult = false;
           
-        } else if (currentTime <= spinPhaseTime + dropPhaseTime) {
-          // ===== DROP PHASE: Ball settles into winning pocket =====
-          const dropProgress = (currentTime - spinPhaseTime) / dropPhaseTime;
-          const easedDrop = easeOutCubic(dropProgress);
+        } else if (currentTime <= slowdownEnd) {
+          // ===== PHASE 2: SLOWDOWN (3-5.5s) =====
+          // Ball VISIBLY slows down dramatically
+          const phaseTime = currentTime - fastSpinEnd;
+          const phaseProgress = phaseTime / slowdownTime;
+          const easedProgress = easeOutQuartic(phaseProgress); // Quartic for dramatic slowdown
           
-          // Wheel is at final position
-          wheelRotation = targetWheelAngle;
+          // Wheel continues decelerating
+          const wheelStartAngle = targetWheelAngle * 0.4;
+          const wheelRemainingAngle = targetWheelAngle * 0.55; // Another 55% of rotation
+          wheelRotation = wheelStartAngle + (wheelRemainingAngle * easedProgress);
           
-          // Ball smoothly moves to landing position
-          const ballAngleAtSpinEnd = -ballTotalAngle;
-          let angleDiff = BALL_LANDING_POSITION - ballAngleAtSpinEnd;
+          // Ball slows down DRAMATICALLY
+          const ballStartAngle = -(ballTotalAngle * 0.5);
+          const ballRemainingAngle = ballTotalAngle * 0.45; // Another 45% of ball rotation
+          ballAngle = ballStartAngle - (ballRemainingAngle * easedProgress);
+          
+          // Ball continues spiraling inward
+          const radiusStart = maxBallRadius - (0.3 * (maxBallRadius - finalBallRadius));
+          const radiusRemaining = (maxBallRadius - finalBallRadius) * 0.6;
+          ballRadius = radiusStart - (radiusRemaining * easedProgress);
+          
+          showBall = true;
+          showResult = false;
+          
+        } else if (currentTime <= settlingEnd) {
+          // ===== PHASE 3: SETTLING (5.5-6.5s) =====
+          // Ball ultra-slowly settles into winning pocket
+          const phaseTime = currentTime - slowdownEnd;
+          const phaseProgress = phaseTime / settlingTime;
+          const easedProgress = easeOutQuintic(phaseProgress); // Quintic for ultra-smooth settling
+          
+          // Wheel reaches final position smoothly
+          const wheelStartAngle = targetWheelAngle * 0.95;
+          const wheelRemainingAngle = targetWheelAngle * 0.05; // Final 5%
+          wheelRotation = wheelStartAngle + (wheelRemainingAngle * easedProgress);
+          
+          // Ball slowly settles to landing position
+          const ballStartAngle = -(ballTotalAngle * 0.95);
+          let angleDiff = BALL_LANDING_POSITION - ballStartAngle;
           
           // Normalize angle difference to shortest path
           while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
           while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
           
-          ballAngle = ballAngleAtSpinEnd + (angleDiff * easedDrop);
-          ballRadius = finalBallRadius;
+          ballAngle = ballStartAngle + (angleDiff * easedProgress);
+          
+          // Ball reaches final radius
+          const radiusStart = maxBallRadius - (0.9 * (maxBallRadius - finalBallRadius));
+          const radiusRemaining = (maxBallRadius - finalBallRadius) * 0.1;
+          ballRadius = radiusStart - (radiusRemaining * easedProgress);
           
           showBall = true;
           showResult = false;
           
-        } else if (currentTime <= spinPhaseTime + dropPhaseTime + restPhaseTime) {
-          // ===== REST PHASE: Ball sits on winning number =====
+        } else if (currentTime <= restEnd) {
+          // ===== PHASE 4: REST (6.5-9.5s) =====
+          // Ball is COMPLETELY STILL on winning number
           wheelRotation = targetWheelAngle;
           ballAngle = BALL_LANDING_POSITION;
           ballRadius = finalBallRadius;
@@ -391,7 +448,7 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
           showResult = false;
           
         } else {
-          // ===== RESULT PHASE: Show overlay =====
+          // ===== PHASE 5: RESULT OVERLAY =====
           wheelRotation = targetWheelAngle;
           ballAngle = BALL_LANDING_POSITION;
           ballRadius = finalBallRadius;
