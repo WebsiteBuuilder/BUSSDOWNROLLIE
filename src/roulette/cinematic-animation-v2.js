@@ -177,15 +177,15 @@ function drawRouletteFrame(
     ctx.stroke();
     ctx.restore();
 
-    // Clean white numbers
+    // Clean white numbers (smaller for compression)
     ctx.save();
     ctx.rotate(startAngle + segmentAngle / 2);
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px Arial";
+    ctx.font = "bold 16px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-    ctx.shadowBlur = 4;
+    ctx.shadowBlur = 3;
     ctx.fillText(segment.num.toString(), wheelRadius * 0.72, 0);
     ctx.restore();
   }
@@ -213,15 +213,15 @@ function drawRouletteFrame(
     const ballX = centerX + Math.cos(ballAngle) * ballRadius;
     const ballY = centerY + Math.sin(ballAngle) * ballRadius;
 
-    // Motion blur trail (4 frames, fades as ball slows)
-    const blurAmount = Math.max(0, 1 - progress) * 0.4;
+    // Motion blur trail (3 frames for smaller file size)
+    const blurAmount = Math.max(0, 1 - progress) * 0.3;
     ctx.globalAlpha = blurAmount;
-    for (let i = 1; i <= 4; i++) {
-      const trailAngle = ballAngle - i * 0.12;
+    for (let i = 1; i <= 3; i++) {
+      const trailAngle = ballAngle - i * 0.15;
       const trailX = centerX + Math.cos(trailAngle) * ballRadius;
       const trailY = centerY + Math.sin(trailAngle) * ballRadius;
       ctx.beginPath();
-      ctx.arc(trailX, trailY, 8, 0, Math.PI * 2);
+      ctx.arc(trailX, trailY, 7, 0, Math.PI * 2);
       ctx.fillStyle = "#e0e0e0";
       ctx.fill();
     }
@@ -267,18 +267,18 @@ function drawRouletteFrame(
     ctx.fillStyle = "#d4af37";
     ctx.fillRect(0, height - 100, width, 3);
 
-    // Winning number in gold
-    ctx.font = "bold 48px Arial";
+    // Winning number in gold (reduced size for smaller file)
+    ctx.font = "bold 40px Arial";
     ctx.fillStyle = "#fbbf24";
     ctx.textAlign = "center";
     ctx.shadowColor = "#fbbf24";
-    ctx.shadowBlur = 20;
-    ctx.fillText(`${colorEmoji} ${winningNumber}`, centerX, height - 55);
+    ctx.shadowBlur = 15;
+    ctx.fillText(`${colorEmoji} ${winningNumber}`, centerX, height - 50);
 
     // Color name below in white
-    ctx.font = "bold 24px Arial";
+    ctx.font = "bold 20px Arial";
     ctx.fillStyle = "#ffffff";
-    ctx.shadowBlur = 10;
+    ctx.shadowBlur = 8;
     ctx.fillText(winningSegment.color.toUpperCase(), centerX, height - 25);
   }
 }
@@ -295,16 +295,16 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   }
 
   const {
-    width = 450,      // Aggressively optimized for <3MB
-    height = 450,
+    width = 400,      // MAXIMUM compression for <3MB guarantee
+    height = 400,
     duration = 9000,  // 9 seconds
-    fps = 20,         // 20 FPS (180 total frames for smaller size)
-    quality = 20      // Higher number = faster encode, smaller file
+    fps = 15,         // 15 FPS (135 total frames - MUCH smaller)
+    quality = 10      // 1-10 = best compression (LOWER is better!)
   } = options;
 
   const totalFrames = Math.floor((duration / 1000) * fps);
   
-  console.log(`🎬 [V2 CASINO OPTIMIZED] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
+  console.log(`🎬 [V2 ULTRA-OPTIMIZED] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
 
   try {
     const canvas = createCanvas(width, height);
@@ -312,10 +312,11 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     
     validateCanvasContext(ctx);
 
-    // Initialize gif-encoder-2 with neuquant algorithm
-    const encoder = new GIFEncoder(width, height, 'neuquant', true);
-    encoder.setDelay(1000 / fps);
-    encoder.setQuality(quality);
+    // Initialize gif-encoder-2 with OCTREE algorithm (smallest files!)
+    const encoder = new GIFEncoder(width, height, 'octree', true);
+    encoder.setQuality(quality);       // 10 = good balance (lower = smaller file)
+    encoder.setFrameRate(fps);         // Better than setDelay
+    encoder.setRepeat(0);              // Loop forever
     encoder.start();
 
     // Animation parameters
