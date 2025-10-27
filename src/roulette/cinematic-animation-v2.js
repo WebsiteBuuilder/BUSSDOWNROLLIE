@@ -14,50 +14,89 @@ import {
 
 // Roulette wheel configuration (standard European order)
 const ROULETTE_NUMBERS = [
-  { num: 0, color: "green" },
-  { num: 32, color: "red" },
-  { num: 15, color: "black" },
-  { num: 19, color: "red" },
-  { num: 4, color: "black" },
-  { num: 21, color: "red" },
-  { num: 2, color: "black" },
-  { num: 25, color: "red" },
-  { num: 17, color: "black" },
-  { num: 34, color: "red" },
-  { num: 6, color: "black" },
-  { num: 27, color: "red" },
-  { num: 13, color: "black" },
-  { num: 36, color: "red" },
-  { num: 11, color: "black" },
-  { num: 30, color: "red" },
-  { num: 8, color: "black" },
-  { num: 23, color: "red" },
-  { num: 10, color: "black" },
-  { num: 5, color: "red" },
-  { num: 24, color: "black" },
-  { num: 16, color: "red" },
-  { num: 33, color: "black" },
-  { num: 1, color: "red" },
-  { num: 20, color: "black" },
-  { num: 14, color: "red" },
-  { num: 31, color: "black" },
-  { num: 9, color: "red" },
-  { num: 22, color: "black" },
-  { num: 18, color: "red" },
-  { num: 29, color: "black" },
-  { num: 7, color: "red" },
-  { num: 28, color: "black" },
-  { num: 12, color: "red" },
-  { num: 35, color: "black" },
-  { num: 3, color: "red" },
-  { num: 26, color: "black" },
+  { num: 0, color: 'green' },
+  { num: 32, color: 'red' },
+  { num: 15, color: 'black' },
+  { num: 19, color: 'red' },
+  { num: 4, color: 'black' },
+  { num: 21, color: 'red' },
+  { num: 2, color: 'black' },
+  { num: 25, color: 'red' },
+  { num: 17, color: 'black' },
+  { num: 34, color: 'red' },
+  { num: 6, color: 'black' },
+  { num: 27, color: 'red' },
+  { num: 13, color: 'black' },
+  { num: 36, color: 'red' },
+  { num: 11, color: 'black' },
+  { num: 30, color: 'red' },
+  { num: 8, color: 'black' },
+  { num: 23, color: 'red' },
+  { num: 10, color: 'black' },
+  { num: 5, color: 'red' },
+  { num: 24, color: 'black' },
+  { num: 16, color: 'red' },
+  { num: 33, color: 'black' },
+  { num: 1, color: 'red' },
+  { num: 20, color: 'black' },
+  { num: 14, color: 'red' },
+  { num: 31, color: 'black' },
+  { num: 9, color: 'red' },
+  { num: 22, color: 'black' },
+  { num: 18, color: 'red' },
+  { num: 29, color: 'black' },
+  { num: 7, color: 'red' },
+  { num: 28, color: 'black' },
+  { num: 12, color: 'red' },
+  { num: 35, color: 'black' },
+  { num: 3, color: 'red' },
+  { num: 26, color: 'black' },
 ];
 
-/**
- * Cubic easeOut for smooth deceleration
- */
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
+const CASINO_COLORS = {
+  tableDark: '#010807',
+  tableLight: '#04251a',
+  woodDark: '#3f2c22',
+  woodLight: '#6f4c3c',
+  brassDark: '#a46a11',
+  brassLight: '#fcd34d',
+  pocketRed: '#aa1615',
+  pocketBlack: '#10161f',
+  pocketGreen: '#0f5d3b',
+  pocketHighlight: '#fde68a',
+  pocketHighlightOuter: '#f59e0b',
+  numberText: '#f9fafb',
+  numberShadow: 'rgba(0, 0, 0, 0.55)',
+  ballMetal: '#f2f2f2',
+  ballShadow: 'rgba(0, 0, 0, 0.45)',
+  ballHighlight: 'rgba(255, 255, 255, 0.85)',
+};
+
+const BALL_LANDING_ANGLE = -Math.PI / 2;
+const MAX_BALL_TRAIL_POINTS = 6;
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function normalizeAngle(angle) {
+  const tau = Math.PI * 2;
+  return ((angle % tau) + tau) % tau;
+}
+
+function lerp(start, end, t) {
+  return start + (end - start) * t;
+}
+
+function updateBallTrail(trail, position) {
+  if (!position) {
+    return;
+  }
+
+  trail.push(position);
+  while (trail.length > MAX_BALL_TRAIL_POINTS) {
+    trail.shift();
+  }
 }
 
 /**
@@ -75,178 +114,202 @@ function easeOutQuintic(t) {
 }
 
 /**
- * Rotational kinematics: Calculate angle at time t
- * angle(t) = initialVelocity * t - 0.5 * deceleration * t^2
- */
-function calculateRotationAngle(initialVelocity, deceleration, time) {
-  return initialVelocity * time - 0.5 * deceleration * time * time;
-}
-
-/**
- * Calculate deceleration needed to reach target angle with given initial velocity
- * Using: finalAngle = initialVelocity * t - 0.5 * deceleration * t^2
- * And: finalVelocity = 0 = initialVelocity - deceleration * t
- * Solving: deceleration = 2 * initialVelocity^2 / (2 * finalAngle)
- */
-function calculateDeceleration(initialVelocity, targetAngle) {
-  return (initialVelocity * initialVelocity) / (2 * targetAngle);
-}
-
-/**
- * Calculate time to stop given initial velocity and deceleration
- * finalVelocity = 0 = initialVelocity - deceleration * time
- */
-function calculateStopTime(initialVelocity, deceleration) {
-  return initialVelocity / deceleration;
-}
-
-/**
  * Draw complete roulette frame with authentic casino styling
  * NO BRANDING - Clean professional casino aesthetic
  */
-function drawRouletteFrame(
+function drawRouletteFrame({
   ctx,
   width,
   height,
   wheelRotation,
   ballAngle,
   ballRadius,
-  progress,
+  ballTrail,
+  showBall,
   winningNumber,
+  winningIndex,
+  highlightStrength,
   showResult,
-  showBall = true
-) {
+}) {
   const centerX = width / 2;
   const centerY = height / 2;
   const wheelRadius = Math.min(width, height) * 0.36;
+  const pocketAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
 
-  // Dark background (FLAT color for compression)
-  ctx.fillStyle = "#0a0a0a";
+  // Velvet table background with subtle vignette
+  const tableGradient = ctx.createRadialGradient(centerX, centerY, width * 0.1, centerX, centerY, width * 0.65);
+  tableGradient.addColorStop(0, CASINO_COLORS.tableLight);
+  tableGradient.addColorStop(1, CASINO_COLORS.tableDark);
+  ctx.fillStyle = tableGradient;
   ctx.fillRect(0, 0, width, height);
 
   ctx.save();
   ctx.translate(centerX, centerY);
 
-  // Wood rim (FLAT color)
+  // Wood rim with polished sheen
   ctx.beginPath();
-  ctx.arc(0, 0, wheelRadius + 40, 0, Math.PI * 2);
-  ctx.fillStyle = "#4e342e";
+  ctx.arc(0, 0, wheelRadius + 44, 0, Math.PI * 2);
+  const woodGradient = ctx.createRadialGradient(0, 0, wheelRadius, 0, 0, wheelRadius + 44);
+  woodGradient.addColorStop(0, CASINO_COLORS.woodLight);
+  woodGradient.addColorStop(1, CASINO_COLORS.woodDark);
+  ctx.fillStyle = woodGradient;
   ctx.fill();
 
-  // Gold ring (FLAT color)
+  // Brass ring with soft reflection
   ctx.beginPath();
-  ctx.arc(0, 0, wheelRadius + 18, 0, Math.PI * 2);
-  ctx.fillStyle = "#c9a227";
+  ctx.arc(0, 0, wheelRadius + 20, 0, Math.PI * 2);
+  const brassGradient = ctx.createRadialGradient(0, 0, wheelRadius * 0.92, 0, 0, wheelRadius + 22);
+  brassGradient.addColorStop(0, CASINO_COLORS.brassLight);
+  brassGradient.addColorStop(1, CASINO_COLORS.brassDark);
+  ctx.fillStyle = brassGradient;
   ctx.fill();
 
-  // Rotate wheel
   ctx.rotate(wheelRotation);
 
-  const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
-
-  // Draw segments with authentic casino colors
   for (let i = 0; i < ROULETTE_NUMBERS.length; i++) {
     const segment = ROULETTE_NUMBERS[i];
-    const startAngle = i * segmentAngle;
-    const endAngle = startAngle + segmentAngle;
+    const startAngle = i * pocketAngle;
+    const endAngle = startAngle + pocketAngle;
 
-    let baseColor;
-    if (segment.color === "green") {
-      baseColor = "#047857";
-    } else if (segment.color === "red") {
-      baseColor = "#b91c1c";
-    } else {
-      baseColor = "#1f2937";
-    }
+    const segmentBaseColor =
+      segment.color === 'green' ? CASINO_COLORS.pocketGreen : segment.color === 'red' ? CASINO_COLORS.pocketRed : CASINO_COLORS.pocketBlack;
 
     ctx.save();
-
-    // Remove glow for better compression (we show result overlay instead)
-    
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.arc(0, 0, wheelRadius, startAngle, endAngle);
     ctx.closePath();
 
-    // FLAT color (no gradient)
-    ctx.fillStyle = baseColor;
+    // Slight radial gradient for depth
+    const pocketGradient = ctx.createRadialGradient(0, 0, wheelRadius * 0.35, 0, 0, wheelRadius);
+    pocketGradient.addColorStop(0, segmentBaseColor);
+    pocketGradient.addColorStop(0.9, segmentBaseColor);
+    pocketGradient.addColorStop(1, '#050505');
+    ctx.fillStyle = pocketGradient;
     ctx.fill();
 
-    // Thin gold separator
-    ctx.strokeStyle = "#c9a227";
-    ctx.lineWidth = 1;
+    // Golden separators
+    ctx.strokeStyle = 'rgba(255, 215, 128, 0.85)';
+    ctx.lineWidth = 2;
     ctx.stroke();
+
     ctx.restore();
 
-    // Simplified dividers
+    // Engraved pocket dividers
     ctx.save();
     ctx.rotate(startAngle);
     ctx.beginPath();
-    ctx.moveTo(wheelRadius * 0.85, 0);
+    ctx.moveTo(wheelRadius * 0.87, 0);
     ctx.lineTo(wheelRadius, 0);
-    ctx.strokeStyle = "#a0a0a0";
+    ctx.strokeStyle = 'rgba(180, 180, 180, 0.6)';
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
 
-    // Clean white numbers (NO shadow for compression)
+    // Pocket numbering with drop shadow
     ctx.save();
-    ctx.rotate(startAngle + segmentAngle / 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 12px Arial"; // Reduced font size for compression
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(segment.num.toString(), wheelRadius * 0.72, 0);
+    ctx.rotate(startAngle + pocketAngle / 2);
+    ctx.fillStyle = CASINO_COLORS.numberShadow;
+    ctx.font = 'bold 14px "Arial"';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(segment.num.toString(), wheelRadius * 0.73 + 1.5, 1.2);
+    ctx.fillStyle = CASINO_COLORS.numberText;
+    ctx.fillText(segment.num.toString(), wheelRadius * 0.73, 0);
     ctx.restore();
   }
 
-  // Center hub (FLAT color)
-  const centerRadius = wheelRadius * 0.25;
+  // Highlight the winning pocket with glow
+  if (highlightStrength > 0 && winningIndex >= 0) {
+    ctx.save();
+    ctx.rotate(winningIndex * pocketAngle);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, wheelRadius, 0, pocketAngle);
+    ctx.closePath();
+    const glowStrength = clamp(highlightStrength, 0, 1);
+    ctx.fillStyle = `rgba(253, 230, 138, ${0.35 * glowStrength})`;
+    ctx.fill();
+
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = `rgba(245, 158, 11, ${0.55 * glowStrength})`;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Inner reflective surface
   ctx.beginPath();
-  ctx.arc(0, 0, centerRadius, 0, Math.PI * 2);
-  ctx.fillStyle = "#808080";
+  ctx.arc(0, 0, wheelRadius * 0.86, 0, Math.PI * 2);
+  const reflectionGradient = ctx.createRadialGradient(0, 0, wheelRadius * 0.2, 0, 0, wheelRadius * 0.86);
+  reflectionGradient.addColorStop(0, 'rgba(255, 255, 255, 0.18)');
+  reflectionGradient.addColorStop(1, 'rgba(120, 120, 120, 0.45)');
+  ctx.fillStyle = reflectionGradient;
+  ctx.fill();
+
+  // Center hub polished steel
+  const hubRadius = wheelRadius * 0.26;
+  ctx.beginPath();
+  ctx.arc(0, 0, hubRadius, 0, Math.PI * 2);
+  const hubGradient = ctx.createRadialGradient(0, 0, hubRadius * 0.35, 0, 0, hubRadius);
+  hubGradient.addColorStop(0, '#d1d5db');
+  hubGradient.addColorStop(0.6, '#9ca3af');
+  hubGradient.addColorStop(1, '#4b5563');
+  ctx.fillStyle = hubGradient;
   ctx.fill();
 
   ctx.restore();
 
-  // Chrome ball (show during spin and rest periods)
+  // Ball trail for cinematic motion blur
+  if (showBall && ballTrail.length > 1) {
+    for (let i = 0; i < ballTrail.length - 1; i++) {
+      const alpha = (i + 1) / ballTrail.length;
+      const point = ballTrail[i];
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 4 - i * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.12 * alpha})`;
+      ctx.fill();
+    }
+  }
+
   if (showBall) {
     const ballX = centerX + Math.cos(ballAngle) * ballRadius;
     const ballY = centerY + Math.sin(ballAngle) * ballRadius;
-
-    // Simple ball (NO blur trail, NO shadow, NO gradient)
+    const ballGradient = ctx.createRadialGradient(ballX - 2, ballY - 2, 1, ballX, ballY, 8);
+    ballGradient.addColorStop(0, CASINO_COLORS.ballHighlight);
+    ballGradient.addColorStop(0.6, CASINO_COLORS.ballMetal);
+    ballGradient.addColorStop(1, CASINO_COLORS.ballShadow);
     ctx.beginPath();
-    ctx.arc(ballX, ballY, 6, 0, Math.PI * 2); // Slightly smaller ball
-    ctx.fillStyle = "#f0f0f0";
+    ctx.arc(ballX, ballY, 6.5, 0, Math.PI * 2);
+    ctx.fillStyle = ballGradient;
     ctx.fill();
-    ctx.strokeStyle = "#707070";
-    ctx.lineWidth = 1;
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.stroke();
   }
 
-  // Result overlay
   if (showResult) {
-    const winningSegment = ROULETTE_NUMBERS.find((s) => s.num === winningNumber);
-    const colorEmoji = winningSegment.color === "red" ? "🔴" : winningSegment.color === "black" ? "⚫" : "🟢";
+    const winningSegment = ROULETTE_NUMBERS[winningIndex];
+    const colorEmoji = winningSegment.color === 'red' ? '🔴' : winningSegment.color === 'black' ? '⚫' : '🟢';
 
-    // Simple black overlay
-    ctx.fillStyle = "#000000";
-    ctx.fillRect(0, height - 80, width, 80);
+    const overlayHeight = 86;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.78)';
+    ctx.fillRect(0, height - overlayHeight, width, overlayHeight);
 
-    // Gold accent bar
-    ctx.fillStyle = "#c9a227";
-    ctx.fillRect(0, height - 80, width, 2);
+    const accentGradient = ctx.createLinearGradient(0, height - overlayHeight, 0, height - overlayHeight + 6);
+    accentGradient.addColorStop(0, CASINO_COLORS.brassLight);
+    accentGradient.addColorStop(1, CASINO_COLORS.brassDark);
+    ctx.fillStyle = accentGradient;
+    ctx.fillRect(0, height - overlayHeight, width, 6);
 
-    // Winning number (NO shadow)
-    ctx.font = "bold 32px Arial";
-    ctx.fillStyle = "#fbbf24";
-    ctx.textAlign = "center";
-    ctx.fillText(`${colorEmoji} ${winningNumber}`, centerX, height - 45);
+    ctx.font = '600 34px "Arial"';
+    ctx.fillStyle = CASINO_COLORS.pocketHighlight;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${colorEmoji} ${winningSegment.num}`, centerX, height - 40);
 
-    // Color name
-    ctx.font = "bold 18px Arial";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(winningSegment.color.toUpperCase(), centerX, height - 20);
+    ctx.font = '600 18px "Arial"';
+    ctx.fillStyle = CASINO_COLORS.numberText;
+    ctx.fillText(`${winningSegment.color.toUpperCase()} WINS`, centerX, height - 16);
   }
 }
 
@@ -270,9 +333,12 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     debugMode = false // Enable debug logging
   } = options;
 
-  const totalFrames = Math.floor((duration / 1000) * fps);
-  
-  console.log(`🎬 [V2 ULTRA-OPTIMIZED] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
+  const totalDurationSeconds = duration / 1000;
+  const totalFrames = Math.floor(totalDurationSeconds * fps);
+
+  console.log(
+    `🎬 [V2 REALISTIC] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`,
+  );
 
   try {
     const canvas = createCanvas(width, height);
@@ -288,188 +354,112 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     encoder.start();
 
     // ===== PHYSICS-BASED ROULETTE SIMULATION =====
-    
-    // Find winning segment index
+
     const winningIndex = ROULETTE_NUMBERS.findIndex((s) => s.num === winningNumber);
     if (winningIndex === -1) throw new Error(`Invalid winning number: ${winningNumber}`);
-    
-    const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length; // ~9.73° per segment
-    
-    // FIXED: Ball landing position at TOP of canvas (12 o'clock)
-    const BALL_LANDING_POSITION = -Math.PI / 2;
-    
-    // Random offset within winning segment (±30% of segment width)
-    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.6;
-    
-    // Calculate exact final wheel angle to align winning segment with ball
-    // Formula: wheelRotation + (winningIndex * segmentAngle) = BALL_LANDING_POSITION + randomOffset
-    const targetSegmentAngle = BALL_LANDING_POSITION - (winningIndex * segmentAngle) + randomOffset;
-    
-    // Add random rotations (8-12 full spins for realism)
-    const randomFullRotations = 8 + Math.random() * 4;
-    const targetWheelAngle = (Math.PI * 2 * randomFullRotations) + targetSegmentAngle;
-    
-    // WHEEL PHYSICS: Rotational kinematics (slower, more realistic)
-    const wheelInitialVelocity = 10 + Math.random() * 3; // rad/s (slower for smoother animation)
-    const wheelDeceleration = calculateDeceleration(wheelInitialVelocity, targetWheelAngle);
-    const wheelStopTime = calculateStopTime(wheelInitialVelocity, wheelDeceleration);
-    
-    // BALL PHYSICS: Ball spins opposite direction, slightly faster, with visible slowdown
-    const ballInitialVelocity = -wheelInitialVelocity * 1.1; // Opposite direction, only 1.1x speed (much slower)
-    const ballTotalRotations = 10 + Math.random() * 3; // Fewer rotations for smoother visual
-    const ballTotalAngle = Math.PI * 2 * ballTotalRotations;
-    
-    // Animation timing phases (OPTIMIZED for file size + smooth deceleration)
-    const fastSpinTime = 2.5;      // Fast spinning phase
-    const slowdownTime = 2.5;      // Visible slowdown phase (dramatic deceleration) - KEEP THIS
-    const settlingTime = 1.0;      // Ball settles into pocket (ultra-slow) - KEEP THIS
-    const restPhaseTime = 2.5;     // Ball completely still on winning number
-    const totalAnimationTime = fastSpinTime + slowdownTime + settlingTime + restPhaseTime; // 8.5s total
-    
-    // Ball radius
-    const maxBallRadius = Math.min(width, height) * 0.42;
-    const finalBallRadius = Math.min(width, height) * 0.38;
-    
-    // Debug logging
+
+    const pocketAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
+    const pocketCenterAngle = winningIndex * pocketAngle + pocketAngle / 2;
+
+    const landingOffset = (Math.random() - 0.5) * pocketAngle * 0.18;
+    const ballLandingAngle = BALL_LANDING_ANGLE + landingOffset;
+
+    const wheelAlignment = normalizeAngle(ballLandingAngle - pocketCenterAngle);
+    const additionalWheelRotations = 6.5 + Math.random() * 4.5; // 6.5 - 11 full rotations
+    const totalWheelRotation = Math.PI * 2 * additionalWheelRotations + wheelAlignment;
+
+    const fastSpinTime = 2.6;
+    const slowdownTime = 2.3;
+    const settlingTime = 1.1;
+    const spinDuration = fastSpinTime + slowdownTime + settlingTime;
+    const restPhaseTime = 1.9;
+    const overlayStart = spinDuration + restPhaseTime;
+
+    const wheelInitialVelocity = (2 * totalWheelRotation) / spinDuration;
+    const wheelDeceleration = wheelInitialVelocity / spinDuration;
+
+    const ballExtraRotations = 3 + Math.random() * 1.4;
+    const ballTotalRotations = additionalWheelRotations + ballExtraRotations;
+    const ballTotalTravel = Math.PI * 2 * ballTotalRotations;
+    const ballStopTime = spinDuration * 0.94;
+    const ballInitialVelocity = (2 * ballTotalTravel) / ballStopTime;
+    const ballDeceleration = ballInitialVelocity / ballStopTime;
+    const ballStartAngle = ballLandingAngle + ballTotalTravel;
+
+    const maxBallRadius = Math.min(width, height) * 0.425;
+    const finalBallRadius = Math.min(width, height) * 0.375;
+    const radiusEaseEnd = spinDuration - settlingTime * 0.4;
+
     if (debugMode) {
-      console.log('🎲 [ROULETTE DEBUG MODE - SIZE OPTIMIZED]');
+      console.log('🎲 [ROULETTE DEBUG MODE - REALISTIC]');
       console.log(`  Winning Number: ${winningNumber} (index: ${winningIndex})`);
-      console.log(`  Target Wheel Angle: ${(targetWheelAngle * 180 / Math.PI).toFixed(2)}°`);
-      console.log(`  Wheel: v0=${wheelInitialVelocity.toFixed(2)} rad/s, a=${wheelDeceleration.toFixed(2)} rad/s²`);
-      console.log(`  Ball: v0=${ballInitialVelocity.toFixed(2)} rad/s (1.1x wheel speed)`);
-      console.log(`  Phases: fast=${fastSpinTime}s, slowdown=${slowdownTime}s, settling=${settlingTime}s, rest=${restPhaseTime}s`);
-      console.log(`  Total: ${totalAnimationTime}s | Frames: ${Math.floor((totalAnimationTime * fps))} @ ${fps}fps`);
+      console.log(`  Landing offset: ${(landingOffset * 180 / Math.PI).toFixed(2)}°`);
+      console.log(`  Wheel rotations: ${additionalWheelRotations.toFixed(2)} | Total angle ${(totalWheelRotation * 180 / Math.PI).toFixed(1)}°`);
+      console.log(`  Wheel physics: v0=${wheelInitialVelocity.toFixed(2)} rad/s, dec=${wheelDeceleration.toFixed(3)} rad/s², stop=${spinDuration.toFixed(2)}s`);
+      console.log(`  Ball physics: travel=${ballTotalRotations.toFixed(2)} rev, v0=${ballInitialVelocity.toFixed(2)} rad/s, stop=${ballStopTime.toFixed(2)}s`);
+      console.log(`  Timeline: spin=${spinDuration.toFixed(2)}s, rest=${restPhaseTime.toFixed(2)}s, overlay=${Math.max(totalDurationSeconds - overlayStart, 0).toFixed(2)}s`);
     }
 
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const ballTrail = [];
     let lastLogTime = Date.now();
-    
+
     for (let frame = 0; frame < totalFrames; frame++) {
       try {
-        // TIME-BASED ANIMATION (not progress-based for physics)
-        const currentTime = (frame / fps); // Current time in seconds
-        const progress = frame / totalFrames; // Still needed for other calculations
-        
-        let wheelRotation, ballAngle, ballRadius, showBall, showResult;
-        
-        // Calculate cumulative phase times
-        const fastSpinEnd = fastSpinTime;
-        const slowdownEnd = fastSpinEnd + slowdownTime;
-        const settlingEnd = slowdownEnd + settlingTime;
-        const restEnd = settlingEnd + restPhaseTime;
-        
-        if (currentTime <= fastSpinEnd) {
-          // ===== PHASE 1: FAST SPIN (0-2.5s) =====
-          // Ball and wheel spin at relatively constant speed
-          const t = currentTime;
-          const phaseProgress = t / fastSpinTime;
-          
-          // Wheel rotates with physics (smooth deceleration)
-          const wheelProgress = easeOutCubic(phaseProgress);
-          wheelRotation = targetWheelAngle * wheelProgress * 0.4; // 40% of total rotation in fast phase
-          
-          // Ball rotates opposite direction at 1.1x speed
-          const ballTotalAngleInPhase = ballTotalAngle * 0.5; // 50% of ball rotation in fast phase
-          const ballProgress = phaseProgress;
-          ballAngle = -(ballTotalAngleInPhase * ballProgress);
-          
-          // Ball spirals inward gently
-          ballRadius = maxBallRadius - (phaseProgress * 0.3 * (maxBallRadius - finalBallRadius));
-          
-          showBall = true;
-          showResult = false;
-          
-        } else if (currentTime <= slowdownEnd) {
-          // ===== PHASE 2: SLOWDOWN (2.5-5s) =====
-          // Ball VISIBLY slows down dramatically
-          const phaseTime = currentTime - fastSpinEnd;
-          const phaseProgress = phaseTime / slowdownTime;
-          const easedProgress = easeOutQuartic(phaseProgress); // Quartic for dramatic slowdown
-          
-          // Wheel continues decelerating
-          const wheelStartAngle = targetWheelAngle * 0.4;
-          const wheelRemainingAngle = targetWheelAngle * 0.55; // Another 55% of rotation
-          wheelRotation = wheelStartAngle + (wheelRemainingAngle * easedProgress);
-          
-          // Ball slows down DRAMATICALLY
-          const ballStartAngle = -(ballTotalAngle * 0.5);
-          const ballRemainingAngle = ballTotalAngle * 0.45; // Another 45% of ball rotation
-          ballAngle = ballStartAngle - (ballRemainingAngle * easedProgress);
-          
-          // Ball continues spiraling inward
-          const radiusStart = maxBallRadius - (0.3 * (maxBallRadius - finalBallRadius));
-          const radiusRemaining = (maxBallRadius - finalBallRadius) * 0.6;
-          ballRadius = radiusStart - (radiusRemaining * easedProgress);
-          
-          showBall = true;
-          showResult = false;
-          
-        } else if (currentTime <= settlingEnd) {
-          // ===== PHASE 3: SETTLING (5-6s) =====
-          // Ball ultra-slowly settles into winning pocket
-          const phaseTime = currentTime - slowdownEnd;
-          const phaseProgress = phaseTime / settlingTime;
-          const easedProgress = easeOutQuintic(phaseProgress); // Quintic for ultra-smooth settling
-          
-          // Wheel reaches final position smoothly
-          const wheelStartAngle = targetWheelAngle * 0.95;
-          const wheelRemainingAngle = targetWheelAngle * 0.05; // Final 5%
-          wheelRotation = wheelStartAngle + (wheelRemainingAngle * easedProgress);
-          
-          // Ball slowly settles to landing position
-          const ballStartAngle = -(ballTotalAngle * 0.95);
-          let angleDiff = BALL_LANDING_POSITION - ballStartAngle;
-          
-          // Normalize angle difference to shortest path
-          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-          
-          ballAngle = ballStartAngle + (angleDiff * easedProgress);
-          
-          // Ball reaches final radius
-          const radiusStart = maxBallRadius - (0.9 * (maxBallRadius - finalBallRadius));
-          const radiusRemaining = (maxBallRadius - finalBallRadius) * 0.1;
-          ballRadius = radiusStart - (radiusRemaining * easedProgress);
-          
-          showBall = true;
-          showResult = false;
-          
-        } else if (currentTime <= restEnd) {
-          // ===== PHASE 4: REST (6-8.5s) =====
-          // Ball is COMPLETELY STILL on winning number
-          wheelRotation = targetWheelAngle;
-          ballAngle = BALL_LANDING_POSITION;
-          ballRadius = finalBallRadius;
-          
-          showBall = true;
-          showResult = false;
-          
-        } else {
-          // ===== PHASE 5: RESULT OVERLAY =====
-          wheelRotation = targetWheelAngle;
-          ballAngle = BALL_LANDING_POSITION;
-          ballRadius = finalBallRadius;
-          
-          showBall = false; // Hide ball during result overlay
-          showResult = true;
+        const currentTime = frame / fps;
+
+        const wheelTime = Math.min(currentTime, spinDuration);
+        let wheelRotation = wheelInitialVelocity * wheelTime - 0.5 * wheelDeceleration * wheelTime * wheelTime;
+        if (currentTime >= spinDuration) {
+          wheelRotation = totalWheelRotation;
         }
 
-        // Draw frame
-        drawRouletteFrame(
+        const ballTime = Math.min(currentTime, ballStopTime);
+        let ballAngle = ballStartAngle - (ballInitialVelocity * ballTime - 0.5 * ballDeceleration * ballTime * ballTime);
+        if (currentTime >= ballStopTime) {
+          const settleProgress = clamp((currentTime - ballStopTime) / (settlingTime * 0.75), 0, 1);
+          ballAngle = lerp(ballAngle, ballLandingAngle, easeOutQuintic(settleProgress));
+        }
+
+        const radiusProgress = clamp(currentTime / radiusEaseEnd, 0, 1);
+        let ballRadius = lerp(maxBallRadius, finalBallRadius * 1.05, easeOutQuartic(radiusProgress));
+        if (currentTime >= spinDuration - settlingTime) {
+          const settleRadiusProgress = clamp((currentTime - (spinDuration - settlingTime)) / settlingTime, 0, 1);
+          const wobble = Math.sin(settleRadiusProgress * Math.PI) * 2.2 * (1 - settleRadiusProgress);
+          ballRadius = finalBallRadius + wobble;
+        }
+
+        const highlightStrength = currentTime >= spinDuration ? clamp((currentTime - spinDuration) / 0.9, 0, 1) : 0;
+        const showResult = currentTime >= overlayStart;
+        const showBall = currentTime <= overlayStart;
+
+        const ballPosition = showBall
+          ? {
+              x: centerX + Math.cos(ballAngle) * ballRadius,
+              y: centerY + Math.sin(ballAngle) * ballRadius,
+            }
+          : null;
+
+        updateBallTrail(ballTrail, ballPosition);
+
+        drawRouletteFrame({
           ctx,
           width,
           height,
           wheelRotation,
           ballAngle,
           ballRadius,
-          progress,
+          ballTrail,
+          showBall,
           winningNumber,
+          winningIndex,
+          highlightStrength: showResult ? 1 : highlightStrength,
           showResult,
-          showBall
-        );
+        });
 
         encoder.addFrame(ctx);
 
-        // Progress logging
         const now = Date.now();
         if (now - lastLogTime >= 500 || frame === totalFrames - 1) {
           const percent = ((frame / totalFrames) * 100).toFixed(0);
