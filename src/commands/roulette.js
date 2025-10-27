@@ -1,17 +1,14 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { startRoulette, handleRouletteButton, showRouletteRules } from '../roulette/enhanced-manager.js';
+import { startRoulette, handleRouletteButton, showRouletteRules } from '../roulette/simple-manager.js';
 import { safeReply } from '../utils/interaction.js';
 
 export const data = new SlashCommandBuilder()
   .setName('roulette')
-  .setDescription('Play European roulette with enhanced betting options')
+  .setDescription('Play European roulette with VP currency')
   .addSubcommand((subcommand) =>
     subcommand
       .setName('play')
       .setDescription('Start a roulette game')
-      .addIntegerOption((option) =>
-        option.setName('amount').setDescription('Initial VP amount to start with').setRequired(true).setMinValue(1)
-      )
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -27,10 +24,8 @@ export async function execute(interaction) {
   }
   
   if (subcommand === 'play') {
-    const amount = interaction.options.getInteger('amount', true);
-
     try {
-      await startRoulette(interaction, amount);
+      await startRoulette(interaction);
     } catch (error) {
       await safeReply(interaction, {
         content: '❌ Failed to start roulette. Please try again soon.',
