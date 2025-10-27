@@ -290,8 +290,8 @@ async function spinWheel(interaction, state, commandId) {
 
     const result = await generateCinematicSpin(pocket.number, {
       duration: 9000,  // 9 seconds (professional casino timing)
-      fps: 30,         // 30 FPS (smooth)
-      quality: 15      // Balanced quality
+      fps: 25,         // 25 FPS (optimized for <3MB file size)
+      quality: 18      // Optimized quality/size balance
     });
 
     const gifBuffer = result.buffer;

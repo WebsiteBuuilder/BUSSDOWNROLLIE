@@ -61,7 +61,8 @@ function easeOutCubic(t) {
 }
 
 /**
- * Draw complete roulette frame with professional styling
+ * Draw complete roulette frame with authentic casino styling
+ * NO BRANDING - Clean professional casino aesthetic
  */
 function drawRouletteFrame(
   ctx,
@@ -76,63 +77,43 @@ function drawRouletteFrame(
 ) {
   const centerX = width / 2;
   const centerY = height / 2;
-  const wheelRadius = Math.min(width, height) * 0.38;
+  const wheelRadius = Math.min(width, height) * 0.36;
 
-  // Background with green felt gradient
-  const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, width * 0.7);
-  bgGradient.addColorStop(0, "#0d4d2d");
-  bgGradient.addColorStop(0.6, "#0a3d24");
-  bgGradient.addColorStop(1, "#051a10");
+  // Dark background with subtle radial gradient
+  const bgGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, width * 0.6);
+  bgGradient.addColorStop(0, "#1a1a1a");
+  bgGradient.addColorStop(1, "#0a0a0a");
   ctx.fillStyle = bgGradient;
   ctx.fillRect(0, 0, width, height);
-
-  // Subtle texture
-  ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
-  for (let i = 0; i < 50; i++) {
-    const x = Math.random() * width;
-    const y = Math.random() * height;
-    ctx.fillRect(x, y, 1, 1);
-  }
-
-  // Title with casino neon effect
-  ctx.save();
-  ctx.font = "bold 36px Arial";
-  const titleGradient = ctx.createLinearGradient(0, 35, width, 35);
-  titleGradient.addColorStop(0, "#00FF88");
-  titleGradient.addColorStop(0.5, "#FFD700");
-  titleGradient.addColorStop(1, "#00FF88");
-  ctx.fillStyle = titleGradient;
-  ctx.textAlign = "center";
-  ctx.shadowColor = "#00FF88";
-  ctx.shadowBlur = 25;
-  ctx.fillText("STILL GUUHHHD 🎰", centerX, 45);
-  ctx.restore();
 
   ctx.save();
   ctx.translate(centerX, centerY);
 
-  // Wooden rim
-  const rimGradient = ctx.createRadialGradient(0, 0, wheelRadius + 15, 0, 0, wheelRadius + 35);
-  rimGradient.addColorStop(0, "#8B4513");
-  rimGradient.addColorStop(0.5, "#654321");
-  rimGradient.addColorStop(1, "#3d2817");
+  // Polished wood outer rim
+  const outerRimGradient = ctx.createRadialGradient(0, 0, wheelRadius + 20, 0, 0, wheelRadius + 40);
+  outerRimGradient.addColorStop(0, "#5d4037");
+  outerRimGradient.addColorStop(0.5, "#4e342e");
+  outerRimGradient.addColorStop(1, "#3e2723");
   ctx.beginPath();
-  ctx.arc(0, 0, wheelRadius + 35, 0, Math.PI * 2);
-  ctx.fillStyle = rimGradient;
+  ctx.arc(0, 0, wheelRadius + 40, 0, Math.PI * 2);
+  ctx.fillStyle = outerRimGradient;
   ctx.fill();
+  ctx.strokeStyle = "#2c1810";
+  ctx.lineWidth = 3;
+  ctx.stroke();
 
-  // Chrome border
-  const chromeGradient = ctx.createRadialGradient(0, 0, wheelRadius + 10, 0, 0, wheelRadius + 20);
-  chromeGradient.addColorStop(0, "#E8E8E8");
-  chromeGradient.addColorStop(0.3, "#C0C0C0");
-  chromeGradient.addColorStop(0.5, "#A8A8A8");
-  chromeGradient.addColorStop(0.7, "#C0C0C0");
-  chromeGradient.addColorStop(1, "#909090");
+  // Brass/gold metallic ring with realistic shine
+  const metalRingGradient = ctx.createRadialGradient(0, 0, wheelRadius + 8, 0, 0, wheelRadius + 18);
+  metalRingGradient.addColorStop(0, "#d4af37");
+  metalRingGradient.addColorStop(0.3, "#f4e5b0");
+  metalRingGradient.addColorStop(0.5, "#c9a227");
+  metalRingGradient.addColorStop(0.7, "#f4e5b0");
+  metalRingGradient.addColorStop(1, "#b8941e");
   ctx.beginPath();
-  ctx.arc(0, 0, wheelRadius + 15, 0, Math.PI * 2);
-  ctx.fillStyle = chromeGradient;
+  ctx.arc(0, 0, wheelRadius + 18, 0, Math.PI * 2);
+  ctx.fillStyle = metalRingGradient;
   ctx.fill();
-  ctx.strokeStyle = "#707070";
+  ctx.strokeStyle = "#9a7b1a";
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -141,34 +122,30 @@ function drawRouletteFrame(
 
   const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
 
-  // Draw segments
+  // Draw segments with authentic casino colors
   for (let i = 0; i < ROULETTE_NUMBERS.length; i++) {
     const segment = ROULETTE_NUMBERS[i];
-    const startAngle = i * segmentAngle - Math.PI / 2;
+    const startAngle = i * segmentAngle;
     const endAngle = startAngle + segmentAngle;
 
-    let segmentColor, shadowColor;
+    let baseColor, darkColor;
     if (segment.color === "green") {
-      segmentColor = "#00843D";
-      shadowColor = "#005A29";
+      baseColor = "#047857";
+      darkColor = "#065f46";
     } else if (segment.color === "red") {
-      segmentColor = "#D50000";
-      shadowColor = "#8B0000";
+      baseColor = "#b91c1c";
+      darkColor = "#991b1b";
     } else {
-      segmentColor = "#1C1C1C";
-      shadowColor = "#0A0A0A";
+      baseColor = "#1f2937";
+      darkColor = "#111827";
     }
 
     ctx.save();
-    ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
 
     // Winning number glow effect
     if (showResult && segment.num === winningNumber) {
-      ctx.shadowColor = "#00FF88";
-      ctx.shadowBlur = 40;
+      ctx.shadowColor = "#fbbf24";
+      ctx.shadowBlur = 30;
     }
 
     ctx.beginPath();
@@ -176,142 +153,104 @@ function drawRouletteFrame(
     ctx.arc(0, 0, wheelRadius, startAngle, endAngle);
     ctx.closePath();
 
-    const segGradient = ctx.createRadialGradient(0, 0, wheelRadius * 0.3, 0, 0, wheelRadius);
-    segGradient.addColorStop(0, segmentColor);
-    segGradient.addColorStop(1, shadowColor);
+    const segGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, wheelRadius);
+    segGradient.addColorStop(0, baseColor);
+    segGradient.addColorStop(0.8, baseColor);
+    segGradient.addColorStop(1, darkColor);
     ctx.fillStyle = segGradient;
     ctx.fill();
 
-    ctx.strokeStyle = "#D4AF37";
+    // Thin gold separator lines
+    ctx.strokeStyle = "#d4af37";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+
+    // Chrome metal pocket dividers
+    ctx.save();
+    ctx.rotate(startAngle);
+    ctx.beginPath();
+    ctx.moveTo(wheelRadius * 0.85, 0);
+    ctx.lineTo(wheelRadius, 0);
+    ctx.strokeStyle = "#c0c0c0";
     ctx.lineWidth = 3;
     ctx.stroke();
     ctx.restore();
 
-    // Diamond separators
+    // Clean white numbers
     ctx.save();
     ctx.rotate(startAngle + segmentAngle / 2);
-    ctx.beginPath();
-    ctx.moveTo(wheelRadius - 15, -5);
-    ctx.lineTo(wheelRadius - 10, 0);
-    ctx.lineTo(wheelRadius - 15, 5);
-    ctx.lineTo(wheelRadius - 20, 0);
-    ctx.closePath();
-    ctx.fillStyle = "#D4AF37";
-    ctx.fill();
-    ctx.strokeStyle = "#B8941E";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.restore();
-
-    // Numbers
-    ctx.save();
-    ctx.rotate(startAngle + segmentAngle / 2);
-    ctx.translate(wheelRadius * 0.7, 0);
-    ctx.rotate(Math.PI / 2);
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "bold 16px Arial";
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px Arial";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-    ctx.shadowBlur = 3;
-    ctx.fillText(segment.num.toString(), 0, 0);
+    ctx.shadowBlur = 4;
+    ctx.fillText(segment.num.toString(), wheelRadius * 0.72, 0);
     ctx.restore();
   }
 
-  // Center hub
-  const centerRadius = wheelRadius * 0.28;
+  // Metallic center hub with gradient (silver/gray tones)
+  const centerRadius = wheelRadius * 0.25;
 
-  // Gold chrome ring
-  const centerChromeGradient = ctx.createRadialGradient(0, 0, centerRadius * 0.9, 0, 0, centerRadius);
-  centerChromeGradient.addColorStop(0, "#D4AF37");
-  centerChromeGradient.addColorStop(0.5, "#B8941E");
-  centerChromeGradient.addColorStop(1, "#8B7220");
+  const centerMetalGradient = ctx.createRadialGradient(-5, -5, 0, 0, 0, centerRadius);
+  centerMetalGradient.addColorStop(0, "#e0e0e0");
+  centerMetalGradient.addColorStop(0.4, "#b0b0b0");
+  centerMetalGradient.addColorStop(0.7, "#808080");
+  centerMetalGradient.addColorStop(1, "#606060");
   ctx.beginPath();
   ctx.arc(0, 0, centerRadius, 0, Math.PI * 2);
-  ctx.fillStyle = centerChromeGradient;
+  ctx.fillStyle = centerMetalGradient;
   ctx.fill();
-  ctx.strokeStyle = "#6B5A1A";
-  ctx.lineWidth = 4;
+  ctx.strokeStyle = "#404040";
+  ctx.lineWidth = 3;
   ctx.stroke();
-
-  // Inner dark circle
-  const innerCenterGradient = ctx.createRadialGradient(-5, -5, 0, 0, 0, centerRadius * 0.85);
-  innerCenterGradient.addColorStop(0, "#3a3a3a");
-  innerCenterGradient.addColorStop(0.5, "#2a2a2a");
-  innerCenterGradient.addColorStop(1, "#1a1a1a");
-  ctx.beginPath();
-  ctx.arc(0, 0, centerRadius * 0.85, 0, Math.PI * 2);
-  ctx.fillStyle = innerCenterGradient;
-  ctx.fill();
-
-  // GUHD EATS branding
-  ctx.fillStyle = "#FFD700";
-  ctx.font = "bold 24px Arial";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.shadowColor = "#00FF88";
-  ctx.shadowBlur = 15;
-  ctx.fillText("GUHD", 0, -10);
-  ctx.font = "bold 20px Arial";
-  ctx.fillText("EATS", 0, 12);
 
   ctx.restore();
 
-  // Ball with motion blur
-  if (progress < 0.95) {
+  // Chrome ball with motion blur trail
+  if (progress < 0.92) {
     const ballX = centerX + Math.cos(ballAngle) * ballRadius;
     const ballY = centerY + Math.sin(ballAngle) * ballRadius;
 
-    // Motion blur trail (more intense when faster)
-    const blurIntensity = Math.max(0.1, 1 - progress);
-    ctx.globalAlpha = 0.25 * blurIntensity;
-    for (let i = 1; i <= 6; i++) {
-      const trailAngle = ballAngle - i * 0.08;
-      const trailRadius = ballRadius + i * 1.5;
-      const trailX = centerX + Math.cos(trailAngle) * trailRadius;
-      const trailY = centerY + Math.sin(trailAngle) * trailRadius;
-
+    // Motion blur trail (4 frames, fades as ball slows)
+    const blurAmount = Math.max(0, 1 - progress) * 0.4;
+    ctx.globalAlpha = blurAmount;
+    for (let i = 1; i <= 4; i++) {
+      const trailAngle = ballAngle - i * 0.12;
+      const trailX = centerX + Math.cos(trailAngle) * ballRadius;
+      const trailY = centerY + Math.sin(trailAngle) * ballRadius;
       ctx.beginPath();
-      ctx.arc(trailX, trailY, 9 - i * 0.5, 0, Math.PI * 2);
-      ctx.fillStyle = "#F0F0F0";
+      ctx.arc(trailX, trailY, 8, 0, Math.PI * 2);
+      ctx.fillStyle = "#e0e0e0";
       ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    // Ball shadow
-    ctx.save();
-    ctx.globalAlpha = 0.4;
+    // Ball shadow for depth
     ctx.beginPath();
-    ctx.arc(ballX + 3, ballY + 3, 9, 0, Math.PI * 2);
-    ctx.fillStyle = "#000000";
+    ctx.arc(ballX + 2, ballY + 2, 8, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
     ctx.fill();
-    ctx.restore();
 
-    // Ball with chrome gradient
-    const ballGradient = ctx.createRadialGradient(ballX - 4, ballY - 4, 1, ballX, ballY, 10);
-    ballGradient.addColorStop(0, "#FFFFFF");
-    ballGradient.addColorStop(0.3, "#F5F5F5");
-    ballGradient.addColorStop(0.6, "#D0D0D0");
-    ballGradient.addColorStop(0.85, "#A0A0A0");
-    ballGradient.addColorStop(1, "#707070");
-
+    // Ball with realistic chrome gradient
+    const ballGradient = ctx.createRadialGradient(ballX - 3, ballY - 3, 1, ballX, ballY, 8);
+    ballGradient.addColorStop(0, "#ffffff");
+    ballGradient.addColorStop(0.4, "#f0f0f0");
+    ballGradient.addColorStop(0.7, "#c0c0c0");
+    ballGradient.addColorStop(1, "#909090");
     ctx.beginPath();
-    ctx.arc(ballX, ballY, 10, 0, Math.PI * 2);
+    ctx.arc(ballX, ballY, 8, 0, Math.PI * 2);
     ctx.fillStyle = ballGradient;
     ctx.fill();
-    ctx.strokeStyle = "#505050";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#707070";
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Shine highlights
+    // Shine highlight
     ctx.beginPath();
-    ctx.arc(ballX - 3, ballY - 3, 3.5, 0, Math.PI * 2);
+    ctx.arc(ballX - 2.5, ballY - 2.5, 2.5, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(ballX + 2, ballY - 1, 1.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.fill();
   }
 
@@ -319,29 +258,28 @@ function drawRouletteFrame(
   if (showResult) {
     const winningSegment = ROULETTE_NUMBERS.find((s) => s.num === winningNumber);
     const colorEmoji = winningSegment.color === "red" ? "🔴" : winningSegment.color === "black" ? "⚫" : "🟢";
-    const colorName = winningSegment.color.toUpperCase();
 
-    // Dark overlay
-    ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
-    ctx.fillRect(0, height - 120, width, 120);
+    // Semi-transparent black overlay
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+    ctx.fillRect(0, height - 100, width, 100);
 
-    // Gold accent line
-    ctx.fillStyle = "#FFD700";
-    ctx.fillRect(0, height - 120, width, 4);
+    // Gold accent bar
+    ctx.fillStyle = "#d4af37";
+    ctx.fillRect(0, height - 100, width, 3);
 
-    // Winning number display
-    ctx.font = "bold 56px Arial";
-    ctx.fillStyle = "#FFD700";
+    // Winning number in gold
+    ctx.font = "bold 48px Arial";
+    ctx.fillStyle = "#fbbf24";
     ctx.textAlign = "center";
-    ctx.shadowColor = "#00FF88";
-    ctx.shadowBlur = 30;
-    ctx.fillText(`🎯 ${winningNumber}`, centerX, height - 75);
+    ctx.shadowColor = "#fbbf24";
+    ctx.shadowBlur = 20;
+    ctx.fillText(`${colorEmoji} ${winningNumber}`, centerX, height - 55);
 
-    // Color indicator
-    ctx.font = "bold 28px Arial";
-    ctx.fillStyle = "#FFFFFF";
-    ctx.shadowBlur = 15;
-    ctx.fillText(`${colorEmoji} ${colorName}`, centerX, height - 35);
+    // Color name below in white
+    ctx.font = "bold 24px Arial";
+    ctx.fillStyle = "#ffffff";
+    ctx.shadowBlur = 10;
+    ctx.fillText(winningSegment.color.toUpperCase(), centerX, height - 25);
   }
 }
 
@@ -357,16 +295,16 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
   }
 
   const {
-    width = 600,
-    height = 600,
+    width = 500,      // Optimized for <3MB
+    height = 500,
     duration = 9000,  // 9 seconds
-    fps = 30,         // 30 FPS
-    quality = 15      // Balanced quality
+    fps = 25,         // 25 FPS (optimal for file size)
+    quality = 18      // Optimized quality/size balance
   } = options;
 
   const totalFrames = Math.floor((duration / 1000) * fps);
   
-  console.log(`🎬 [V2 OPTIMIZED] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
+  console.log(`🎬 [V2 CASINO] Generating spin for #${winningNumber} (${totalFrames} frames @ ${fps}fps, ${width}x${height})`);
 
   try {
     const canvas = createCanvas(width, height);
@@ -381,7 +319,7 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     encoder.start();
 
     // Animation parameters
-    const spinDuration = 0.85; // 85% of animation is spinning
+    const spinDuration = 0.88; // 88% of animation is spinning, 12% shows result
     
     // Find winning segment index
     const winningIndex = ROULETTE_NUMBERS.findIndex((s) => s.num === winningNumber);
@@ -396,14 +334,14 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
         const spinProgress = Math.min(progress / spinDuration, 1);
         const easedProgress = easeOutCubic(spinProgress);
 
-        // Wheel rotation
-        const wheelRotation = easedProgress * (Math.PI * 16) + targetAngle * easedProgress;
+        // Wheel rotation (14 full revolutions)
+        const wheelRotation = easedProgress * (Math.PI * 14) + targetAngle * easedProgress;
 
-        // Ball physics
-        const ballSpeed = (1 - easedProgress) * 18 + 4;
+        // Ball physics (counter to wheel direction)
+        const ballSpeed = (1 - easedProgress) * 16 + 3;
         const ballAngle = -progress * Math.PI * 2 * ballSpeed;
-        const maxRadius = Math.min(width, height) * 0.44;
-        const minRadius = Math.min(width, height) * 0.39;
+        const maxRadius = Math.min(width, height) * 0.42; // Starts at outer edge
+        const minRadius = Math.min(width, height) * 0.38; // Spirals inward
         const ballRadius = maxRadius - easedProgress * (maxRadius - minRadius);
 
         const showResult = progress > spinDuration;
