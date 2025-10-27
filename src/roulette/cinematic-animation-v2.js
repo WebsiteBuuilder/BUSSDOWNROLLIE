@@ -61,6 +61,13 @@ function easeOutCubic(t) {
 }
 
 /**
+ * Quartic easeOut for even smoother deceleration
+ */
+function easeOutQuartic(t) {
+  return 1 - Math.pow(1 - t, 4);
+}
+
+/**
  * Draw complete roulette frame with authentic casino styling
  * NO BRANDING - Clean professional casino aesthetic
  */
@@ -73,7 +80,8 @@ function drawRouletteFrame(
   ballRadius,
   progress,
   winningNumber,
-  showResult
+  showResult,
+  showBall = true
 ) {
   const centerX = width / 2;
   const centerY = height / 2;
@@ -172,8 +180,8 @@ function drawRouletteFrame(
 
   ctx.restore();
 
-  // Chrome ball with motion blur trail
-  if (progress < 0.92) {
+  // Chrome ball (show during spin and rest periods)
+  if (showBall) {
     const ballX = centerX + Math.cos(ballAngle) * ballRadius;
     const ballY = centerY + Math.sin(ballAngle) * ballRadius;
 
@@ -250,12 +258,20 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     encoder.start();
 
     // Animation parameters
-    const spinDuration = 0.88; // 88% of animation is spinning, 12% shows result
+    const spinDuration = 0.75;  // 75% spinning
+    const restDuration = 0.15;   // 15% ball resting on number
+    const resultDuration = 0.10; // 10% showing overlay
     
     // Find winning segment index
     const winningIndex = ROULETTE_NUMBERS.findIndex((s) => s.num === winningNumber);
     const segmentAngle = (Math.PI * 2) / ROULETTE_NUMBERS.length;
-    const targetAngle = -(winningIndex * segmentAngle) + Math.PI / 2;
+    
+    // Add random offset so ball doesn't always land at exact same spot
+    const randomOffset = (Math.random() - 0.5) * segmentAngle * 0.8; // Random position within 80% of segment
+    const targetAngle = -(winningIndex * segmentAngle) + Math.PI / 2 + randomOffset;
+    
+    // Add random extra rotations (12-16 instead of fixed 14)
+    const randomSpins = 12 + Math.random() * 4;
 
     let lastLogTime = Date.now();
 
@@ -263,19 +279,35 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
       try {
         const progress = frame / totalFrames;
         const spinProgress = Math.min(progress / spinDuration, 1);
-        const easedProgress = easeOutCubic(spinProgress);
+        const easedProgress = easeOutQuartic(spinProgress); // Use stronger easing
 
-        // Wheel rotation (14 full revolutions)
-        const wheelRotation = easedProgress * (Math.PI * 14) + targetAngle * easedProgress;
+        // Wheel rotation with randomized spins
+        const wheelRotation = easedProgress * (Math.PI * 2 * randomSpins) + targetAngle * easedProgress;
 
-        // Ball physics (counter to wheel direction)
-        const ballSpeed = (1 - easedProgress) * 16 + 3;
-        const ballAngle = -progress * Math.PI * 2 * ballSpeed;
-        const maxRadius = Math.min(width, height) * 0.42; // Starts at outer edge
-        const minRadius = Math.min(width, height) * 0.38; // Spirals inward
-        const ballRadius = maxRadius - easedProgress * (maxRadius - minRadius);
-
-        const showResult = progress > spinDuration;
+        // Determine animation phase
+        const isSpinning = progress < spinDuration;
+        const isResting = progress >= spinDuration && progress < spinDuration + restDuration;
+        const showResult = progress > spinDuration + restDuration;
+        
+        // Ball physics
+        let ballAngle, ballRadius;
+        
+        if (isSpinning) {
+          // During spin: ball moves counter to wheel direction
+          const ballSpeed = (1 - easedProgress) * 16 + 3;
+          ballAngle = -progress * Math.PI * 2 * ballSpeed;
+          const maxRadius = Math.min(width, height) * 0.42; // Starts at outer edge
+          const minRadius = Math.min(width, height) * 0.38; // Spirals inward
+          ballRadius = maxRadius - easedProgress * (maxRadius - minRadius);
+        } else {
+          // During rest or result: ball stays at final position
+          const finalBallSpeed = 3;
+          const finalProgress = spinDuration;
+          ballAngle = -finalProgress * Math.PI * 2 * finalBallSpeed - targetAngle;
+          ballRadius = Math.min(width, height) * 0.38;
+        }
+        
+        const showBall = progress < (spinDuration + restDuration);
 
         // Draw frame
         drawRouletteFrame(
@@ -287,7 +319,8 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
           ballRadius,
           progress,
           winningNumber,
-          showResult
+          showResult,
+          showBall
         );
 
         encoder.addFrame(ctx);

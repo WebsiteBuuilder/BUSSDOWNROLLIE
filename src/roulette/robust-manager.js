@@ -4,6 +4,7 @@ import {
   createRoulettePromptEmbed, 
   createSpinEmbed,
   createCinematicSpinEmbed,
+  createLoadingSpinEmbed,
   createResultEmbed, 
   createBettingButtons,
   createRouletteRulesEmbed,
@@ -256,9 +257,9 @@ async function spinWheel(interaction, state, commandId) {
   // Remove the game from active games
   ACTIVE_ROULETTE.delete(commandId);
 
-  // Immediately acknowledge the interaction with a "Spinning" message
+  // Show instant loading embed
   const spinMessage = await interaction.editReply({
-    embeds: [createSpinEmbed(state.displayName, '🎡', 'The wheel is spinning...•', state.totalBet, null)],
+    embeds: [createLoadingSpinEmbed(state.displayName, state.totalBet)],
     components: [],
     files: []
   });
