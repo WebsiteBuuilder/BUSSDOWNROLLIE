@@ -25,6 +25,12 @@ import {
   determineResult,
 } from '../lib/blackjack.js';
 import { canDoubleDown } from '../lib/house-edge.js';
+import { 
+  createGameUIEmbed, 
+  createResultUIEmbed, 
+  createActionButtons, 
+  createRulesEmbed 
+} from '../lib/blackjack-ui.js';
 
 function ephemeral(options = {}) {
   const { flags, ...rest } = options ?? {};
@@ -353,33 +359,9 @@ async function cancelBlackjack(interaction) {
 
 async function showRules(interaction) {
   const minStr = await getConfig('bj_min', '1');
+  const min = parseInt(minStr, 10);
 
-  const embed = new EmbedBuilder()
-    .setColor(0x000000)
-    .setTitle('♠️ Blackjack Rules')
-    .setDescription('Welcome to the GUHD EATS Blackjack table!')
-    .addFields(
-      {
-        name: '📊 Table Limits',
-        value: `Min: ${formatVP(minStr)}\nMax: No Limit`,
-        inline: true,
-      },
-      { name: '💰 Payouts', value: 'Blackjack: 3:2\nWin: 1:1\nPush: Bet Returned', inline: true },
-      {
-        name: '🎴 Rules',
-        value:
-          '• Dealer hits on soft 17\n• Blackjack pays 3:2\n• Double down available\n• Split available (same value cards)',
-        inline: false,
-      },
-      {
-        name: '⏱️ Timeout',
-        value: 'You have 60 seconds per action or the game will auto-stand.',
-        inline: false,
-      }
-    )
-    .setFooter({ text: 'Good luck at the tables!' })
-    .setTimestamp();
-
+  const embed = createRulesEmbed(min);
   await interaction.reply({ embeds: [embed] });
 }
 
@@ -387,61 +369,8 @@ async function showGameUI(interaction, round, gameState, user) {
   const playerValue = calculateHandValue(gameState.playerHand);
   const dealerValue = calculateHandValue([gameState.dealerHand[0]]);
 
-  const embed = new EmbedBuilder()
-    .setColor(0x000000)
-    .setTitle('♠️ Blackjack')
-    .addFields(
-      {
-        name: '🎴 Your Hand',
-        value: `${formatHand(gameState.playerHand)}\n**Value:** ${playerValue}`,
-        inline: false,
-      },
-      {
-        name: '🃏 Dealer Hand',
-        value: `${formatHand(gameState.dealerHand, true)}\n**Showing:** ${dealerValue}`,
-        inline: false,
-      },
-      { name: '💰 Bet', value: formatVP(gameState.bet), inline: true },
-      { name: '💵 Balance', value: formatVP(user.vp - gameState.bet), inline: true }
-    )
-    .setTimestamp();
-
-  const row = new ActionRowBuilder();
-
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`bj_hit_${round.id}`)
-      .setLabel('Hit')
-      .setStyle(ButtonStyle.Primary)
-  );
-
-  row.addComponents(
-    new ButtonBuilder()
-      .setCustomId(`bj_stand_${round.id}`)
-      .setLabel('Stand')
-      .setStyle(ButtonStyle.Success)
-  );
-
-  // Double down only available on first two cards
-  if (gameState.playerHand.length === 2 && user.vp >= gameState.bet) {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`bj_double_${round.id}`)
-        .setLabel('Double')
-        .setStyle(ButtonStyle.Secondary)
-    );
-  }
-
-  // Split only available on matching pairs
-  if (canSplit(gameState.playerHand) && user.vp >= gameState.bet && !gameState.split) {
-    row.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`bj_split_${round.id}`)
-        .setLabel('Split')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(true) // Simplified version doesn't support split yet
-    );
-  }
+  const embed = createGameUIEmbed(gameState, user, playerValue, dealerValue);
+  const row = createActionButtons(round, gameState, user);
 
   await updateInteractionMessage(interaction, {
     embeds: [embed],
@@ -640,39 +569,7 @@ async function resolveGame(interaction, round, gameState, user, options = {}) {
   const playerValue = calculateHandValue(gameState.playerHand);
   const dealerValue = calculateHandValue(gameState.dealerHand);
 
-  let color = 0xff0000;
-  let title = '😔 You Lost';
-
-  if (result === 'win') {
-    color = 0x00ff00;
-    title = '🎉 You Won!';
-  } else if (result === 'blackjack') {
-    color = 0xffd700;
-    title = '♠️ BLACKJACK!';
-  } else if (result === 'push') {
-    color = 0xffff00;
-    title = '🤝 Push';
-  }
-
-  const embed = new EmbedBuilder()
-    .setColor(color)
-    .setTitle(title)
-    .addFields(
-      {
-        name: '🎴 Your Hand',
-        value: `${formatHand(gameState.playerHand)}\n**Value:** ${playerValue}`,
-        inline: false,
-      },
-      {
-        name: '🃏 Dealer Hand',
-        value: `${formatHand(gameState.dealerHand)}\n**Value:** ${dealerValue}`,
-        inline: false,
-      },
-      { name: '💰 Bet', value: formatVP(gameState.bet), inline: true },
-      { name: '💵 Payout', value: formatVP(payout), inline: true },
-      { name: '💳 New Balance', value: formatVP(updatedUser.vp), inline: true }
-    )
-    .setTimestamp();
+  const embed = createResultUIEmbed(gameState, user, playerValue, dealerValue, result, payout, updatedUser);
 
   await updateInteractionMessage(interaction, {
     embeds: [embed],
