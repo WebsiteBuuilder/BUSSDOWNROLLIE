@@ -254,7 +254,7 @@ async function spinWheel(interaction, state, commandId) {
 
   // Immediately acknowledge the interaction with a "Spinning" message
   const spinMessage = await interaction.editReply({
-    embeds: [createSpinEmbed(state.displayName, state.totalBet)],
+    embeds: [createSpinEmbed(state.displayName, '🎡', 'The wheel is spinning...•', state.totalBet, null)],
     components: [],
     files: []
   });
