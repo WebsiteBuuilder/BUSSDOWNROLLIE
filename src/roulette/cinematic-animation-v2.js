@@ -273,9 +273,16 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
     
     // Add random extra rotations (12-16 instead of fixed 14)
     const randomSpins = 12 + Math.random() * 4;
+    
+    // Final ball position in canvas coordinates (where winning segment ends up)
+    const finalBallAngleCanvas = Math.PI / 2 + randomOffset; // Top position with random offset
 
     let lastLogTime = Date.now();
 
+    // Pre-calculate final positions for consistency
+    const finalWheelRotation = (Math.PI * 2 * randomSpins) + targetAngle;
+    const finalBallRadius = Math.min(width, height) * 0.38;
+    
     for (let frame = 0; frame < totalFrames; frame++) {
       try {
         const progress = frame / totalFrames;
@@ -289,38 +296,42 @@ export async function generateCinematicSpin(winningNumber, options = {}) {
         let wheelRotation, ballAngle, ballRadius;
         
         if (isSpinning) {
-          // Fast spinning phase
+          // Fast spinning phase - smooth deceleration
           const spinProgress = progress / spinDuration;
           const easedProgress = easeOutQuartic(spinProgress);
-          wheelRotation = easedProgress * (Math.PI * 2 * randomSpins) + targetAngle * easedProgress;
           
-          const ballSpeed = (1 - easedProgress) * 16 + 3;
-          ballAngle = -progress * Math.PI * 2 * ballSpeed;
+          // Wheel rotates to final position
+          wheelRotation = easedProgress * finalWheelRotation;
+          
+          // Ball spins independently (opposite direction, faster initially)
+          const ballRotations = 18 - (easedProgress * 15); // Starts at 18, ends at 3 rotations
+          ballAngle = progress * Math.PI * 2 * ballRotations;
+          
+          // Ball spirals inward
           const maxRadius = Math.min(width, height) * 0.42;
-          const minRadius = Math.min(width, height) * 0.38;
-          ballRadius = maxRadius - easedProgress * (maxRadius - minRadius);
+          ballRadius = maxRadius - easedProgress * (maxRadius - finalBallRadius);
           
         } else if (isSlowingDown) {
-          // Gradual slowdown phase (1 second)
+          // Slowdown phase - ball settles onto winning number
           const slowdownProgress = (progress - spinDuration) / slowdownDuration;
-          const easeSlowdown = easeOutCubic(slowdownProgress); // Gentler for slowdown
+          const easeSlowdown = easeOutCubic(slowdownProgress);
           
-          // Wheel continues to target angle
-          const finalSpin = 1.0; // Almost at target
-          wheelRotation = (finalSpin) * (Math.PI * 2 * randomSpins) + targetAngle * (1.0 - slowdownProgress * 0.1);
+          // Wheel is at final position
+          wheelRotation = finalWheelRotation;
           
-          // Ball gradually settles
-          const startBallSpeed = 3;
-          const endBallSpeed = 0.2;
-          const ballSpeed = startBallSpeed - (startBallSpeed - endBallSpeed) * easeSlowdown;
-          ballAngle = -((spinDuration + slowdownProgress * slowdownDuration) * Math.PI * 2 * ballSpeed) - targetAngle * slowdownProgress;
-          ballRadius = Math.min(width, height) * 0.38;
+          // Ball smoothly moves to final position (top of wheel, on winning segment)
+          const spinEndBallRotations = 3;
+          const startBallAngle = spinDuration * Math.PI * 2 * spinEndBallRotations;
+          
+          // Smoothly transition to final ball position in canvas space
+          ballAngle = startBallAngle + (finalBallAngleCanvas - startBallAngle) * easeSlowdown;
+          ballRadius = finalBallRadius;
           
         } else {
-          // Resting or result: completely still
-          wheelRotation = (Math.PI * 2 * randomSpins) + targetAngle;
-          ballAngle = -targetAngle; // Aligned with winning segment
-          ballRadius = Math.min(width, height) * 0.38;
+          // Resting or result - completely still, ball ON the winning number
+          wheelRotation = finalWheelRotation;
+          ballAngle = finalBallAngleCanvas; // Ball at top, on winning segment
+          ballRadius = finalBallRadius;
         }
         
         const showBall = !showResult; // Hide ball only during result overlay
