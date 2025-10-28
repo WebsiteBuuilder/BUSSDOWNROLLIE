@@ -2,7 +2,7 @@ import { Client, ButtonInteraction } from 'discord.js';
 import { GiveawayService } from './service.js';
 import { GiveawayScheduler } from './scheduler.js';
 import { DailyGiveawayScheduler } from './daily-scheduler.js';
-import { initGiveawayDb, closeGiveawayDb, flushJackpotUpdates } from './db.js';
+import { ensureGiveawayDb, closeGiveawayDb, flushJackpotUpdates } from './db.js';
 import { logger } from '../logger.js';
 
 interface GiveawayContext {
@@ -24,7 +24,12 @@ export function initGiveawaySystem(client: Client): GiveawayContext {
   logger.info('Initializing giveaway system');
 
   // Initialize database
-  initGiveawayDb();
+  try {
+    ensureGiveawayDb();
+  } catch (error) {
+    logger.error('Failed to initialize giveaway database', { err: error });
+    throw error;
+  }
 
   // Create service and scheduler
   const service = new GiveawayService(client);

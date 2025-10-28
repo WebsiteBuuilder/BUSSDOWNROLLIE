@@ -85,6 +85,57 @@ async function ensureTypescriptBuild() {
   return typescriptBuildPromise;
 }
 
+async function ensureGiveawayDatabaseReady() {
+  const localDb = join(__dirname, 'giveaway', 'db.js');
+  const distDb = join(distSrcDir, 'giveaway', 'db.js');
+
+  const tryEnsure = async (candidate) => {
+    try {
+      const module = await import(pathToFileURL(candidate).href);
+      const ensureFn = module?.ensureGiveawayDb;
+
+      if (typeof ensureFn === 'function') {
+        ensureFn();
+        return true;
+      }
+
+      logger.warn('Giveaway database module missing ensureGiveawayDb export', {
+        source: candidate,
+      });
+      return false;
+    } catch (error) {
+      logger.error('failed to prepare giveaway database schema', {
+        source: candidate,
+        err: error,
+      });
+      throw error;
+    }
+  };
+
+  if (existsSync(localDb)) {
+    return tryEnsure(localDb);
+  }
+
+  if (existsSync(distDb)) {
+    return tryEnsure(distDb);
+  }
+
+  const built = await ensureTypescriptBuild();
+  if (!built) {
+    logger.warn('Skipping giveaway database initialization: TypeScript build failed.');
+    return false;
+  }
+
+  if (existsSync(distDb)) {
+    return tryEnsure(distDb);
+  }
+
+  logger.warn('Skipping giveaway database initialization: compiled giveaway DB module missing.', {
+    path: distDb,
+  });
+  return false;
+}
+
 function createUnavailableGiveawayHandlers() {
   return {
     initGiveawaySystem() {
@@ -134,41 +185,51 @@ function updateGiveawayHandlers(module, sourcePath) {
 }
 
 async function loadGiveawayHandlers() {
+  const tryLoadModule = async (modulePath) => {
+    try {
+      const module = await import(pathToFileURL(modulePath).href);
+      updateGiveawayHandlers(module, modulePath);
+      return true;
+    } catch (error) {
+      logger.error('failed to load giveaway module', { source: modulePath, err: error });
+      return false;
+    }
+  };
+
   const localJs = join(__dirname, 'giveaway', 'router.js');
-  if (existsSync(localJs)) {
-    const module = await import(pathToFileURL(localJs).href);
-    updateGiveawayHandlers(module, localJs);
-    return;
-  }
+  try {
+    if (existsSync(localJs) && (await tryLoadModule(localJs))) {
+      return;
+    }
 
-  const distJs = join(distSrcDir, 'giveaway', 'router.js');
-  if (existsSync(distJs)) {
-    const module = await import(pathToFileURL(distJs).href);
-    updateGiveawayHandlers(module, distJs);
-    return;
-  }
+    const distJs = join(distSrcDir, 'giveaway', 'router.js');
+    if (existsSync(distJs) && (await tryLoadModule(distJs))) {
+      return;
+    }
 
-  const tsSource = join(__dirname, 'giveaway', 'router.ts');
-  if (!existsSync(tsSource)) {
-    logger.warn('Giveaway system disabled: router module not found.');
-    return;
-  }
+    const tsSource = join(__dirname, 'giveaway', 'router.ts');
+    if (!existsSync(tsSource)) {
+      logger.warn('Giveaway system disabled: router module not found.');
+      return;
+    }
 
-  const built = await ensureTypescriptBuild();
-  if (!built) {
-    logger.warn('Giveaway system disabled: TypeScript build failed.');
-    return;
-  }
+    const built = await ensureTypescriptBuild();
+    if (!built) {
+      logger.warn('Giveaway system disabled: TypeScript build failed.');
+      return;
+    }
 
-  if (existsSync(distJs)) {
-    const module = await import(pathToFileURL(distJs).href);
-    updateGiveawayHandlers(module, distJs);
-    return;
-  }
+    if (existsSync(distJs) && (await tryLoadModule(distJs))) {
+      return;
+    }
 
-  logger.warn('Giveaway system disabled: compiled router module missing after build.', {
-    path: distJs,
-  });
+    logger.warn('Giveaway system disabled: compiled router module missing after build.', {
+      path: distJs,
+    });
+    return;
+  } catch (error) {
+    logger.error('unexpected error while loading giveaway handlers', { err: error });
+  }
 }
 
 const giveawayModuleReady = loadGiveawayHandlers();
@@ -293,6 +354,15 @@ async function init() {
     // Initialize database
     await initializeDatabase();
     console.log('✅ Database initialized');
+
+    try {
+      const ensured = await ensureGiveawayDatabaseReady();
+      if (!ensured) {
+        logger.warn('Giveaway database not initialized during startup; giveaway commands may be unavailable.');
+      }
+    } catch (error) {
+      logger.warn('Failed to initialize giveaway database during startup', { err: error });
+    }
 
     // Load commands and events
     await loadCommands();
