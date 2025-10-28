@@ -77,18 +77,27 @@ if (!existsSync(DATA_DIR)) {
 }
 
 // PERFORMANCE OPTIMIZATION: Single WAL-mode connection with prepared statement reuse
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
-db.pragma('cache_size = -64000'); // 64MB cache
+let db: Database.Database | null = null;
+let statementsInitialized = false;
 
 // PERFORMANCE OPTIMIZATION: Batch jackpot updates
 let pendingJackpotAmount = 0;
 let jackpotFlushTimer: NodeJS.Timeout | null = null;
 
+function getDb(): Database.Database {
+  if (!db) {
+    db = new Database(DB_PATH);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = NORMAL');
+    db.pragma('cache_size = -64000'); // 64MB cache
+  }
+  return db;
+}
+
 // Initialize database schema
 export function initGiveawayDb(): void {
-  db.exec(`
+  const database = getDb();
+  database.exec(`
     CREATE TABLE IF NOT EXISTS giveaways (
       id TEXT PRIMARY KEY,
       guildId TEXT NOT NULL,
@@ -169,86 +178,118 @@ export function initGiveawayDb(): void {
 
     CREATE INDEX IF NOT EXISTS idx_modifiers_date ON daily_modifiers(date);
   `);
+  
+  // Initialize prepared statements after tables are created
+  initStatements();
 }
 
-// Prepared statements
-const insertGiveawayStmt = db.prepare(`
+// Prepared statement variables
+let insertGiveawayStmt: any;
+let selectGiveawayStmt: any;
+let selectAllActiveStmt: any;
+let selectActiveInChannelStmt: any;
+let updateGiveawayStmt: any;
+let insertEntryStmt: any;
+let selectEntriesStmt: any;
+let countUserEntriesStmt: any;
+let countAllEntriesStmt: any;
+let deleteEntriesStmt: any;
+let insertHistoryStmt: any;
+let selectHistoryStmt: any;
+let countHistoryStmt: any;
+let selectJackpotStmt: any;
+let updateJackpotStmt: any;
+let insertModifierStmt: any;
+let selectModifiersStmt: any;
+let selectDailyScheduleStmt: any;
+let updateDailyScheduleStmt: any;
+
+// Initialize prepared statements (called after tables are created)
+function initStatements(): void {
+  if (statementsInitialized) return;
+  
+  const database = getDb();
+  
+  insertGiveawayStmt = database.prepare(`
   INSERT INTO giveaways (
     id, guildId, channelId, messageId, hostId, title, description,
     buyInCost, hostCut, maxEntriesPerUser, startAt, endAt, state,
     seed, winnerUserId, type, createdAt, updatedAt
   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`);
+  `);
 
-const selectGiveawayStmt = db.prepare('SELECT * FROM giveaways WHERE id = ?');
+  selectGiveawayStmt = database.prepare('SELECT * FROM giveaways WHERE id = ?');
 
-const selectAllActiveStmt = db.prepare(
-  "SELECT * FROM giveaways WHERE state IN ('ACTIVE', 'REVEALING')"
-);
+  selectAllActiveStmt = database.prepare(
+    "SELECT * FROM giveaways WHERE state IN ('ACTIVE', 'REVEALING')"
+  );
 
-const selectActiveInChannelStmt = db.prepare(
-  "SELECT * FROM giveaways WHERE channelId = ? AND state IN ('ACTIVE', 'REVEALING') LIMIT 1"
-);
+  selectActiveInChannelStmt = database.prepare(
+    "SELECT * FROM giveaways WHERE channelId = ? AND state IN ('ACTIVE', 'REVEALING') LIMIT 1"
+  );
 
-const updateGiveawayStmt = db.prepare(`
-  UPDATE giveaways
-  SET messageId = COALESCE(?, messageId),
-      state = COALESCE(?, state),
-      seed = COALESCE(?, seed),
-      winnerUserId = COALESCE(?, winnerUserId),
-      endAt = COALESCE(?, endAt),
-      updatedAt = ?
-  WHERE id = ?
-`);
+  updateGiveawayStmt = database.prepare(`
+    UPDATE giveaways
+    SET messageId = COALESCE(?, messageId),
+        state = COALESCE(?, state),
+        seed = COALESCE(?, seed),
+        winnerUserId = COALESCE(?, winnerUserId),
+        endAt = COALESCE(?, endAt),
+        updatedAt = ?
+    WHERE id = ?
+  `);
 
-const insertEntryStmt = db.prepare(
-  'INSERT INTO giveaway_entries (giveawayId, userId, createdAt) VALUES (?, ?, ?)'
-);
+  insertEntryStmt = database.prepare(
+    'INSERT INTO giveaway_entries (giveawayId, userId, createdAt) VALUES (?, ?, ?)'
+  );
 
-const selectEntriesStmt = db.prepare(
-  'SELECT * FROM giveaway_entries WHERE giveawayId = ? ORDER BY id ASC'
-);
+  selectEntriesStmt = database.prepare(
+    'SELECT * FROM giveaway_entries WHERE giveawayId = ? ORDER BY id ASC'
+  );
 
-const countUserEntriesStmt = db.prepare(
-  'SELECT COUNT(*) as count FROM giveaway_entries WHERE giveawayId = ? AND userId = ?'
-);
+  countUserEntriesStmt = database.prepare(
+    'SELECT COUNT(*) as count FROM giveaway_entries WHERE giveawayId = ? AND userId = ?'
+  );
 
-const countAllEntriesStmt = db.prepare(
-  'SELECT COUNT(*) as count FROM giveaway_entries WHERE giveawayId = ?'
-);
+  countAllEntriesStmt = database.prepare(
+    'SELECT COUNT(*) as count FROM giveaway_entries WHERE giveawayId = ?'
+  );
 
-const deleteEntriesStmt = db.prepare('DELETE FROM giveaway_entries WHERE giveawayId = ?');
+  deleteEntriesStmt = database.prepare('DELETE FROM giveaway_entries WHERE giveawayId = ?');
 
-const insertHistoryStmt = db.prepare(`
-  INSERT INTO giveaway_history (
-    giveawayId, winnerUserId, pot, payoutAmount, hostAmount, type, seed, completedAt
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-`);
+  insertHistoryStmt = database.prepare(`
+    INSERT INTO giveaway_history (
+      giveawayId, winnerUserId, pot, payoutAmount, hostAmount, type, seed, completedAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
-const selectHistoryStmt = db.prepare(
-  'SELECT * FROM giveaway_history ORDER BY completedAt DESC LIMIT ? OFFSET ?'
-);
+  selectHistoryStmt = database.prepare(
+    'SELECT * FROM giveaway_history ORDER BY completedAt DESC LIMIT ? OFFSET ?'
+  );
 
-const countHistoryStmt = db.prepare('SELECT COUNT(*) as count FROM giveaway_history');
+  countHistoryStmt = database.prepare('SELECT COUNT(*) as count FROM giveaway_history');
 
-const selectJackpotStmt = db.prepare('SELECT * FROM global_jackpot WHERE id = 1');
+  selectJackpotStmt = database.prepare('SELECT * FROM global_jackpot WHERE id = 1');
 
-const updateJackpotStmt = db.prepare(
-  'UPDATE global_jackpot SET totalVPSpent = totalVPSpent + ?, lastUpdated = ? WHERE id = 1'
-);
+  updateJackpotStmt = database.prepare(
+    'UPDATE global_jackpot SET totalVPSpent = totalVPSpent + ?, lastUpdated = ? WHERE id = 1'
+  );
 
-const insertModifierStmt = db.prepare(`
-  INSERT INTO daily_modifiers (date, modifierType, value, addedBy, createdAt)
-  VALUES (?, ?, ?, ?, ?)
-`);
+  insertModifierStmt = database.prepare(`
+    INSERT INTO daily_modifiers (date, modifierType, value, addedBy, createdAt)
+    VALUES (?, ?, ?, ?, ?)
+  `);
 
-const selectModifiersStmt = db.prepare('SELECT * FROM daily_modifiers WHERE date = ?');
+  selectModifiersStmt = database.prepare('SELECT * FROM daily_modifiers WHERE date = ?');
 
-const selectDailyScheduleStmt = db.prepare('SELECT * FROM daily_schedule WHERE id = 1');
+  selectDailyScheduleStmt = database.prepare('SELECT * FROM daily_schedule WHERE id = 1');
 
-const updateDailyScheduleStmt = db.prepare(
-  'UPDATE daily_schedule SET lastRunDate = ?, nextRunTime = ? WHERE id = 1'
-);
+  updateDailyScheduleStmt = database.prepare(
+    'UPDATE daily_schedule SET lastRunDate = ?, nextRunTime = ? WHERE id = 1'
+  );
+  
+  statementsInitialized = true;
+}
 
 // Database operations
 export function createGiveaway(record: GiveawayRecord): GiveawayRecord {
@@ -420,6 +461,8 @@ export function updateDailySchedule(lastRunDate: string, nextRunTime: number): v
 // STABILITY OPTIMIZATION: Graceful shutdown with pending flushes
 export function closeGiveawayDb(): void {
   flushJackpotUpdates();
-  db.close();
+  if (db) {
+    db.close();
+  }
 }
 
