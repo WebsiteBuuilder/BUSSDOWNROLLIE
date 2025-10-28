@@ -116,6 +116,19 @@ Discord expects every interaction—slash commands and message components alike�
 
 Battle component handlers combine these helpers with permission checks so that only the initiating players can press their buttons; everyone else receives a private notice while the button press is still acknowledged in time.
 
+## 🎁 Giveaway Database Recovery
+
+The giveaway system now verifies its SQLite schema before any commands load. If the bot logs
+`Giveaway database schema is unavailable` during startup, the file at `data/giveaways.db` is either
+missing tables or is corrupted.
+
+1. Stop the bot process.
+2. Delete `data/giveaways.db` (the file will be recreated automatically).
+3. Restart the bot so the giveaway tables can be rebuilt before commands are registered.
+
+After a successful restart you should no longer see the schema warning, and giveaway commands will load
+normally.
+
 ### Blackjack Configuration & Casino Channel
 
 - Set `CASINO_CHANNEL_ID` to the text channel where casino games are permitted (for example, `#casino`).

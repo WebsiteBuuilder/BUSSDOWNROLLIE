@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import Database from 'better-sqlite3';
+import { logger } from '../logger.js';
 
 // Types
 export type GiveawayState = 'ACTIVE' | 'REVEALING' | 'COMPLETE' | 'CANCELLED';
@@ -79,6 +80,8 @@ if (!existsSync(DATA_DIR)) {
 // PERFORMANCE OPTIMIZATION: Single WAL-mode connection with prepared statement reuse
 let db: Database.Database | null = null;
 let statementsInitialized = false;
+let schemaReady = false;
+let schemaVerificationStmt: Database.Statement | null = null;
 
 // PERFORMANCE OPTIMIZATION: Batch jackpot updates
 let pendingJackpotAmount = 0;
@@ -95,7 +98,7 @@ function getDb(): Database.Database {
 }
 
 // Initialize database schema
-export function initGiveawayDb(): void {
+function initializeGiveawaySchema(): void {
   const database = getDb();
   database.exec(`
     CREATE TABLE IF NOT EXISTS giveaways (
@@ -178,9 +181,60 @@ export function initGiveawayDb(): void {
 
     CREATE INDEX IF NOT EXISTS idx_modifiers_date ON daily_modifiers(date);
   `);
-  
+
   // Initialize prepared statements after tables are created
   initStatements();
+}
+
+export function ensureGiveawayDb(): void {
+  if (schemaReady) {
+    return;
+  }
+
+  try {
+    initializeGiveawaySchema();
+
+    const database = getDb();
+    if (!schemaVerificationStmt) {
+      schemaVerificationStmt = database.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='giveaways'"
+      );
+    }
+
+    const row = schemaVerificationStmt.get() as { name?: string } | undefined;
+    if (!row?.name) {
+      throw new Error('Giveaway database schema missing expected `giveaways` table.');
+    }
+
+    schemaReady = true;
+  } catch (rawError) {
+    schemaReady = false;
+    statementsInitialized = false;
+    schemaVerificationStmt = null;
+
+    const error = rawError instanceof Error ? rawError : new Error(String(rawError));
+    logger.error('failed to initialize giveaway database schema', {
+      err: error,
+      dbPath: DB_PATH,
+    });
+
+    throw new Error(
+      `Giveaway database schema is unavailable. If the file at ${DB_PATH} is corrupted, delete it and restart to rebuild.`,
+      { cause: error }
+    );
+  }
+}
+
+export function initGiveawayDb(): void {
+  ensureGiveawayDb();
+}
+
+function ensureGiveawayDbReady(): void {
+  ensureGiveawayDb();
+
+  if (!statementsInitialized) {
+    initStatements();
+  }
 }
 
 // Prepared statement variables
@@ -293,6 +347,7 @@ function initStatements(): void {
 
 // Database operations
 export function createGiveaway(record: GiveawayRecord): GiveawayRecord {
+  ensureGiveawayDbReady();
   insertGiveawayStmt.run(
     record.id,
     record.guildId,
@@ -317,15 +372,18 @@ export function createGiveaway(record: GiveawayRecord): GiveawayRecord {
 }
 
 export function getGiveaway(id: string): GiveawayRecord | null {
+  ensureGiveawayDbReady();
   const row = selectGiveawayStmt.get(id) as GiveawayRecord | undefined;
   return row ?? null;
 }
 
 export function getAllActive(): GiveawayRecord[] {
+  ensureGiveawayDbReady();
   return selectAllActiveStmt.all() as GiveawayRecord[];
 }
 
 export function getActiveInChannel(channelId: string): GiveawayRecord | null {
+  ensureGiveawayDbReady();
   const row = selectActiveInChannelStmt.get(channelId) as GiveawayRecord | undefined;
   return row ?? null;
 }
@@ -334,6 +392,7 @@ export function updateGiveaway(
   id: string,
   updates: Partial<Pick<GiveawayRecord, 'messageId' | 'state' | 'seed' | 'winnerUserId' | 'endAt'>>
 ): void {
+  ensureGiveawayDbReady();
   const now = Date.now();
   updateGiveawayStmt.run(
     updates.messageId ?? null,
@@ -347,6 +406,7 @@ export function updateGiveaway(
 }
 
 export function addEntry(giveawayId: string, userId: string): GiveawayEntry {
+  ensureGiveawayDbReady();
   const now = Date.now();
   const info = insertEntryStmt.run(giveawayId, userId, now);
   return {
@@ -358,24 +418,29 @@ export function addEntry(giveawayId: string, userId: string): GiveawayEntry {
 }
 
 export function getEntries(giveawayId: string): GiveawayEntry[] {
+  ensureGiveawayDbReady();
   return selectEntriesStmt.all(giveawayId) as GiveawayEntry[];
 }
 
 export function countUserEntries(giveawayId: string, userId: string): number {
+  ensureGiveawayDbReady();
   const row = countUserEntriesStmt.get(giveawayId, userId) as { count: number };
   return row.count;
 }
 
 export function countAllEntries(giveawayId: string): number {
+  ensureGiveawayDbReady();
   const row = countAllEntriesStmt.get(giveawayId) as { count: number };
   return row.count;
 }
 
 export function deleteEntries(giveawayId: string): void {
+  ensureGiveawayDbReady();
   deleteEntriesStmt.run(giveawayId);
 }
 
 export function saveHistory(history: Omit<GiveawayHistory, 'id'>): number {
+  ensureGiveawayDbReady();
   const info = insertHistoryStmt.run(
     history.giveawayId,
     history.winnerUserId,
@@ -390,16 +455,19 @@ export function saveHistory(history: Omit<GiveawayHistory, 'id'>): number {
 }
 
 export function getHistory(limit: number, offset: number): GiveawayHistory[] {
+  ensureGiveawayDbReady();
   return selectHistoryStmt.all(limit, offset) as GiveawayHistory[];
 }
 
 export function getHistoryCount(): number {
+  ensureGiveawayDbReady();
   const row = countHistoryStmt.get() as { count: number };
   return row.count;
 }
 
 // PERFORMANCE OPTIMIZATION: Batch jackpot updates
 export function queueJackpotUpdate(amount: number): void {
+  ensureGiveawayDbReady();
   pendingJackpotAmount += amount;
   
   if (jackpotFlushTimer) {
@@ -417,8 +485,12 @@ export function queueJackpotUpdate(amount: number): void {
 }
 
 export function flushJackpotUpdates(): void {
-  if (pendingJackpotAmount === 0) return;
-  
+  if (pendingJackpotAmount === 0) {
+    return;
+  }
+
+  ensureGiveawayDbReady();
+
   const now = Date.now();
   updateJackpotStmt.run(pendingJackpotAmount, now);
   pendingJackpotAmount = 0;
@@ -430,6 +502,7 @@ export function flushJackpotUpdates(): void {
 }
 
 export function getJackpotTotal(): number {
+  ensureGiveawayDbReady();
   const row = selectJackpotStmt.get() as GlobalJackpot | undefined;
   return row?.totalVPSpent ?? 0;
 }
@@ -440,29 +513,49 @@ export function addDailyModifier(
   value: number,
   addedBy: string
 ): number {
+  ensureGiveawayDbReady();
   const now = Date.now();
   const info = insertModifierStmt.run(date, modifierType, value, addedBy, now);
   return Number(info.lastInsertRowid);
 }
 
 export function getDailyModifiers(date: string): DailyModifier[] {
+  ensureGiveawayDbReady();
   return selectModifiersStmt.all(date) as DailyModifier[];
 }
 
 export function getDailySchedule(): DailySchedule {
+  ensureGiveawayDbReady();
   const row = selectDailyScheduleStmt.get() as DailySchedule;
   return row;
 }
 
 export function updateDailySchedule(lastRunDate: string, nextRunTime: number): void {
+  ensureGiveawayDbReady();
   updateDailyScheduleStmt.run(lastRunDate, nextRunTime);
 }
 
 // STABILITY OPTIMIZATION: Graceful shutdown with pending flushes
 export function closeGiveawayDb(): void {
-  flushJackpotUpdates();
+  try {
+    flushJackpotUpdates();
+  } catch (error) {
+    logger.warn('failed to flush jackpot updates during shutdown', { err: error });
+  }
+
   if (db) {
     db.close();
+    db = null;
   }
+
+  if (jackpotFlushTimer) {
+    clearTimeout(jackpotFlushTimer);
+    jackpotFlushTimer = null;
+  }
+  pendingJackpotAmount = 0;
+
+  statementsInitialized = false;
+  schemaReady = false;
+  schemaVerificationStmt = null;
 }
 
