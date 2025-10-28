@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getLeaderboard } from '../db/index.js';
-import { formatVP, getMedalEmoji } from '../lib/utils.js';
+import { formatVP, getMedalEmoji, getProviderRoleIds } from '../lib/utils.js';
 
 // Cache for leaderboard (60 second TTL)
 const cache = {
@@ -39,13 +39,31 @@ export async function execute(interaction) {
       });
     }
 
-    // Build leaderboard display
+    // Build leaderboard display (filter out providers)
+    const providerRoleIds = getProviderRoleIds();
+    const guild = interaction.guild;
+    
     const startRank = (page - 1) * 10;
     let description = '';
+    let displayedCount = 0;
 
     for (let i = 0; i < leaderboardData.users.length; i++) {
       const user = leaderboardData.users[i];
-      const rank = startRank + i + 1;
+      
+      // Filter out providers
+      if (guild && providerRoleIds.length > 0) {
+        try {
+          const member = await guild.members.fetch(user.discordId);
+          const isProvider = providerRoleIds.some(roleId => member.roles.cache.has(roleId));
+          if (isProvider) {
+            continue; // Skip providers
+          }
+        } catch {
+          // User not in guild or error, skip role check
+        }
+      }
+      
+      const rank = startRank + displayedCount + 1;
       const medal = getMedalEmoji(rank);
 
       try {
@@ -54,6 +72,8 @@ export async function execute(interaction) {
       } catch {
         description += `${medal} **${rank}.** Unknown User — ${formatVP(user.vp)}\n`;
       }
+      
+      displayedCount++;
     }
 
     const embed = new EmbedBuilder()

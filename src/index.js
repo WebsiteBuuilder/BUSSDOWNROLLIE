@@ -24,7 +24,7 @@ const distSrcDir = join(projectRoot, 'dist', 'src');
 let typescriptBuildPromise = null;
 
 async function ensureTypescriptBuild() {
-  const giveawayOutput = join(distSrcDir, 'features', 'giveaways', 'router.js');
+  const giveawayOutput = join(distSrcDir, 'giveaway', 'router.js');
   if (existsSync(giveawayOutput)) {
     return true;
   }
@@ -87,7 +87,7 @@ async function ensureTypescriptBuild() {
 
 function createUnavailableGiveawayHandlers() {
   return {
-    initGiveaways() {
+    initGiveawaySystem() {
       logger.warn('Giveaway module unavailable during initialization; skipping setup.');
     },
     isGiveawayButton() {
@@ -115,13 +115,13 @@ let giveawaysLoaded = false;
 let giveawayModuleSource = null;
 
 function updateGiveawayHandlers(module, sourcePath) {
-  const initFn = module?.initGiveaways;
+  const initFn = module?.initGiveawaySystem;
   const handleFn = module?.handleGiveawayButton;
   const isButtonFn = module?.isGiveawayButton;
 
   if (typeof initFn === 'function' && typeof handleFn === 'function' && typeof isButtonFn === 'function') {
     giveawayHandlers = {
-      initGiveaways: initFn,
+      initGiveawaySystem: initFn,
       handleGiveawayButton: handleFn,
       isGiveawayButton: isButtonFn,
     };
@@ -134,21 +134,21 @@ function updateGiveawayHandlers(module, sourcePath) {
 }
 
 async function loadGiveawayHandlers() {
-  const localJs = join(__dirname, 'features', 'giveaways', 'router.js');
+  const localJs = join(__dirname, 'giveaway', 'router.js');
   if (existsSync(localJs)) {
     const module = await import(pathToFileURL(localJs).href);
     updateGiveawayHandlers(module, localJs);
     return;
   }
 
-  const distJs = join(distSrcDir, 'features', 'giveaways', 'router.js');
+  const distJs = join(distSrcDir, 'giveaway', 'router.js');
   if (existsSync(distJs)) {
     const module = await import(pathToFileURL(distJs).href);
     updateGiveawayHandlers(module, distJs);
     return;
   }
 
-  const tsSource = join(__dirname, 'features', 'giveaways', 'router.ts');
+  const tsSource = join(__dirname, 'giveaway', 'router.ts');
   if (!existsSync(tsSource)) {
     logger.warn('Giveaway system disabled: router module not found.');
     return;
@@ -315,7 +315,7 @@ client.once(Events.ClientReady, async () => {
 
   // Initialize giveaway system
   await giveawayModuleReady;
-  giveawayHandlers.initGiveaways(client);
+  giveawayHandlers.initGiveawaySystem(client);
 
   if (!giveawaysLoaded) {
     logger.warn('Giveaway system not initialized; related commands will be unavailable.');
