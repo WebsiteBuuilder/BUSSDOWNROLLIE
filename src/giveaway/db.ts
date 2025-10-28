@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import Database from 'better-sqlite3';
+import Database, { Database as DatabaseType } from 'better-sqlite3';
 import { logger } from '../logger.js';
 
 // Types
@@ -78,7 +78,7 @@ if (!existsSync(DATA_DIR)) {
 }
 
 // PERFORMANCE OPTIMIZATION: Single WAL-mode connection with prepared statement reuse
-let db: Database.Database | null = null;
+let db: DatabaseType | null = null;
 let statementsInitialized = false;
 let schemaReady = false;
 let schemaVerificationStmt: Database.Statement | null = null;
@@ -87,7 +87,7 @@ let schemaVerificationStmt: Database.Statement | null = null;
 let pendingJackpotAmount = 0;
 let jackpotFlushTimer: NodeJS.Timeout | null = null;
 
-function getDb(): Database.Database {
+function getDb(): DatabaseType {
   if (!db) {
     db = new Database(DB_PATH);
     db.pragma('journal_mode = WAL');
@@ -275,11 +275,11 @@ function initStatements(): void {
   selectGiveawayStmt = database.prepare('SELECT * FROM giveaways WHERE id = ?');
 
   selectAllActiveStmt = database.prepare(
-    "SELECT * FROM giveaways WHERE state IN ('ACTIVE', 'REVEALING')"
+    `SELECT * FROM giveaways WHERE state IN ('ACTIVE', 'REVEALING')`
   );
 
   selectActiveInChannelStmt = database.prepare(
-    "SELECT * FROM giveaways WHERE channelId = ? AND state IN ('ACTIVE', 'REVEALING') LIMIT 1"
+    `SELECT * FROM giveaways WHERE channelId = ? AND state IN ('ACTIVE', 'REVEALING') LIMIT 1`
   );
 
   updateGiveawayStmt = database.prepare(`
