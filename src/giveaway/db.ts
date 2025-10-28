@@ -1,7 +1,9 @@
 import { existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
-import Database, { Database as DatabaseType } from 'better-sqlite3';
+import Database from 'better-sqlite3';
 import { logger } from '../logger.js';
+
+type DatabaseType = InstanceType<typeof Database>;
 
 // Types
 export type GiveawayState = 'ACTIVE' | 'REVEALING' | 'COMPLETE' | 'CANCELLED';
@@ -81,7 +83,7 @@ if (!existsSync(DATA_DIR)) {
 let db: DatabaseType | null = null;
 let statementsInitialized = false;
 let schemaReady = false;
-let schemaVerificationStmt: Database.Statement | null = null;
+let schemaVerificationStmt: any = null;
 
 // PERFORMANCE OPTIMIZATION: Batch jackpot updates
 let pendingJackpotAmount = 0;
@@ -219,8 +221,7 @@ export function ensureGiveawayDb(): void {
     });
 
     throw new Error(
-      `Giveaway database schema is unavailable. If the file at ${DB_PATH} is corrupted, delete it and restart to rebuild.`,
-      { cause: error }
+      `Giveaway database schema is unavailable. If the file at ${DB_PATH} is corrupted, delete it and restart to rebuild.`
     );
   }
 }
