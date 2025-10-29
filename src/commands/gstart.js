@@ -4,20 +4,70 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
+  EmbedBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from 'discord.js';
 import { getGiveawayService, getGiveawayScheduler } from '../giveaway/router.js';
 
 /**
- * Parse duration string like "30m", "1h30m", "2h"
+ * Parse duration string like "30m", "1h30m", "2h", "1 hour 30 minutes"
  */
 function parseDuration(str) {
-  const hourMatch = str.match(/(\d+)h/);
-  const minMatch = str.match(/(\d+)m/);
-  
-  const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
-  const minutes = minMatch ? parseInt(minMatch[1]) : 0;
-  
-  return (hours * 60 + minutes) * 60 * 1000;
+  if (!str) {
+    return null;
+  }
+
+  const normalized = str.toLowerCase().replace(/\s+/g, '');
+  const pattern = /(\d+)(h|hr|hrs|hour|hours|m|min|mins|minute|minutes)/g;
+
+  let totalMinutes = 0;
+  let matchedLength = 0;
+  let match;
+
+  while ((match = pattern.exec(normalized)) !== null) {
+    const [, valueStr, unit] = match;
+    const value = parseInt(valueStr, 10);
+
+    if (Number.isNaN(value)) {
+      return null;
+    }
+
+    matchedLength += match[0].length;
+
+    if (unit.startsWith('h')) {
+      totalMinutes += value * 60;
+    } else {
+      totalMinutes += value;
+    }
+  }
+
+  if (matchedLength === 0 || matchedLength !== normalized.length || totalMinutes === 0) {
+    return null;
+  }
+
+  return totalMinutes * 60 * 1000;
+}
+
+function formatDuration(durationMs) {
+  const totalMinutes = Math.round(durationMs / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+
+  if (!parts.length) {
+    return '0m';
+  }
+
+  return parts.join(' ');
 }
 
 export const data = new SlashCommandBuilder()
@@ -79,14 +129,14 @@ const MODAL_FIELD_IDS = {
 function buildGiveawayModal(prefill = {}) {
   const modal = new ModalBuilder()
     .setCustomId(MODAL_ID)
-    .setTitle('Create a Giveaway');
+    .setTitle('🎁 Launch a Giveaway');
 
   const titleInput = new TextInputBuilder()
     .setCustomId(MODAL_FIELD_IDS.title)
-    .setLabel('Giveaway title')
+    .setLabel('🎟️ Giveaway title')
     .setStyle(TextInputStyle.Short)
     .setMaxLength(100)
-    .setPlaceholder('Ex: VIP Dinner for Two')
+    .setPlaceholder('e.g. VIP Dinner for Two')
     .setRequired(true);
 
   if (prefill.title) {
@@ -95,7 +145,7 @@ function buildGiveawayModal(prefill = {}) {
 
   const descriptionInput = new TextInputBuilder()
     .setCustomId(MODAL_FIELD_IDS.description)
-    .setLabel('Description (optional)')
+    .setLabel('📝 Description (optional)')
     .setStyle(TextInputStyle.Paragraph)
     .setPlaceholder('Tell customers what they could win!')
     .setRequired(false)
@@ -107,9 +157,9 @@ function buildGiveawayModal(prefill = {}) {
 
   const durationInput = new TextInputBuilder()
     .setCustomId(MODAL_FIELD_IDS.duration)
-    .setLabel('Duration (ex: 30m, 1h30m)')
+    .setLabel('⏱️ Duration')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('30m')
+    .setPlaceholder('e.g. 30m, 1h 30m, 2 hours')
     .setRequired(true);
 
   if (prefill.duration) {
@@ -120,9 +170,9 @@ function buildGiveawayModal(prefill = {}) {
 
   const buyInInput = new TextInputBuilder()
     .setCustomId(MODAL_FIELD_IDS.buyInCost)
-    .setLabel('Entry cost (VP)')
+    .setLabel('💰 Entry cost (VP)')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('1')
+    .setPlaceholder('Minimum 1 VP')
     .setRequired(true);
 
   if (prefill.buyInCost != null) {
@@ -133,9 +183,9 @@ function buildGiveawayModal(prefill = {}) {
 
   const hostMaxInput = new TextInputBuilder()
     .setCustomId(MODAL_FIELD_IDS.hostCutMaxEntries)
-    .setLabel('Host cut % / Max entries per user')
+    .setLabel('🏦 Host cut % / 🎯 Max entries per user')
     .setStyle(TextInputStyle.Short)
-    .setPlaceholder('Ex: 10 / 5')
+    .setPlaceholder('e.g. 10 / 5 (0 / 5 for default)')
     .setRequired(true);
 
   if (prefill.hostCut != null || prefill.maxEntries != null) {
@@ -229,7 +279,15 @@ async function runCreateFlow(interaction, options) {
   }
 
   const durationMs = parseDuration(durationStr);
-  if (!durationMs || durationMs < 120_000) {
+  if (durationMs == null) {
+    await interaction.reply({
+      content: '❌ Could not understand the duration. Try formats like `30m`, `1h 30m`, or `2 hours`.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (durationMs < 120_000) {
     await interaction.reply({
       content: '❌ Invalid duration. Minimum is 2 minutes (2m).',
       ephemeral: true,
@@ -276,15 +334,44 @@ async function runCreateFlow(interaction, options) {
       ? `https://discord.com/channels/${giveaway.guildId}/${giveaway.channelId}/${giveaway.messageId}`
       : null;
 
+    const displayDuration = formatDuration(durationMs);
+    const endTimestamp = Math.floor(giveaway.endAt / 1000);
+
+    const summaryEmbed = new EmbedBuilder()
+      .setColor(0x5865f2)
+      .setTitle('Giveaway created!')
+      .setDescription('Your giveaway is live — here are the details at a glance:')
+      .addFields(
+        { name: '🎟️ Title', value: title, inline: false },
+        { name: '💰 Entry cost', value: `${buyInCost} VP`, inline: true },
+        { name: '🏦 Host cut', value: `${hostCut}%`, inline: true },
+        { name: '🎯 Max entries', value: `${maxEntriesPerUser} per user`, inline: true },
+        { name: '⏱️ Duration', value: `${displayDuration}\nEnds <t:${endTimestamp}:R>`, inline: false }
+      )
+      .setFooter({ text: `Hosted by ${interaction.user.tag}` })
+      .setTimestamp(new Date(giveaway.startAt));
+
+    if (description) {
+      summaryEmbed.addFields({ name: '📝 Description', value: description, inline: false });
+    }
+
+    const components = [];
+
+    if (messageLink) {
+      components.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setLabel('Open giveaway message')
+            .setStyle(ButtonStyle.Link)
+            .setURL(messageLink)
+        )
+      );
+    }
+
     await interaction.editReply({
-      content:
-        `✅ **Giveaway created!**\n\n` +
-        `🎟️ Title: **${title}**\n` +
-        `💰 Entry cost: **${buyInCost} VP**\n` +
-        `🏦 Your cut: **${hostCut}%**\n` +
-        `🎯 Max entries: **${maxEntriesPerUser} per user**\n` +
-        `⏰ Duration: **${durationStr}**\n\n` +
-        (messageLink ? `[Jump to giveaway](${messageLink})` : 'Check the channel above!'),
+      content: '✅ Giveaway created successfully!',
+      embeds: [summaryEmbed],
+      components,
     });
   } catch (error) {
     console.error('Error creating giveaway:', error);
@@ -367,7 +454,8 @@ export async function handleGstartModalSubmit(interaction) {
   if (!parsed) {
     await interaction.reply({
       ephemeral: true,
-      content: '❌ Could not understand the host cut and max entries. Try a format like `10 / 5`.',
+      content:
+        '❌ Could not understand the host cut and max entries. Try a format like `10 / 5`, where the first number is your cut and the second is the per-user limit.',
     });
     return;
   }
