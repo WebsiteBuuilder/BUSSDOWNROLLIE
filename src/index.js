@@ -9,6 +9,7 @@ import { initLogger } from './lib/logger.js';
 import { handleBattleComponent, handleBattleSelect, isBattleInteraction } from './commands/battle.js';
 import { handleBlackjackInteraction } from './commands/blackjack.js';
 import { handleRouletteButton } from './commands/roulette.js';
+import { GSTART_MODAL_ID, handleGstartModalSubmit } from './commands/gstart.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
 import { logger } from './logger.js';
@@ -442,6 +443,13 @@ client.on('interactionCreate', async (interaction) => {
         }
       }
       return;
+    }
+
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId === GSTART_MODAL_ID) {
+        await handleGstartModalSubmit(interaction);
+        return;
+      }
     }
 
     if (interaction.isButton()) {
