@@ -1,11 +1,20 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { getGiveawayService, getGiveawayScheduler } from '../giveaway/router.js';
+import {
+  getGiveawayService,
+  getGiveawayScheduler,
+  ensureGiveawayRuntimeAvailable,
+} from '../giveaway/runtime.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gcancel')
   .setDescription('⛔ Cancel an active giveaway and refund all entrants');
 
 export async function execute(interaction) {
+  const available = await ensureGiveawayRuntimeAvailable(interaction);
+  if (!available) {
+    return;
+  }
+
   const service = getGiveawayService();
   const scheduler = getGiveawayScheduler();
 

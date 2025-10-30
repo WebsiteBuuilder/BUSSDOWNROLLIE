@@ -8,7 +8,11 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { getGiveawayService, getGiveawayScheduler } from '../giveaway/router.js';
+import {
+  getGiveawayService,
+  getGiveawayScheduler,
+  ensureGiveawayRuntimeAvailable,
+} from '../giveaway/runtime.js';
 
 /**
  * Parse duration string like "30m", "1h30m", "2h", "1 hour 30 minutes"
@@ -223,6 +227,11 @@ function parseHostCutAndMaxEntries(raw) {
 }
 
 async function runCreateFlow(interaction, options) {
+  const available = await ensureGiveawayRuntimeAvailable(interaction);
+  if (!available) {
+    return;
+  }
+
   const service = getGiveawayService();
   const scheduler = getGiveawayScheduler();
 

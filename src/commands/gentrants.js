@@ -1,11 +1,16 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { getGiveawayService } from '../giveaway/router.js';
+import { getGiveawayService, ensureGiveawayRuntimeAvailable } from '../giveaway/runtime.js';
 
 export const data = new SlashCommandBuilder()
   .setName('gentrants')
   .setDescription('👥 View participants in the active giveaway');
 
 export async function execute(interaction) {
+  const available = await ensureGiveawayRuntimeAvailable(interaction);
+  if (!available) {
+    return;
+  }
+
   const service = getGiveawayService();
 
   // Find active giveaway in this channel

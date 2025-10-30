@@ -22,7 +22,7 @@ import { formatVP } from '../lib/utils.js';
 
 // Hybrid system imports
 import { computeSpinPlan } from './physics.js';
-import { createPlaceholderEmbed, createResultEmbed as createHybridResultEmbed, FRAME_DELAY } from './render.js';
+import { createPlaceholderEmbed, createResultEmbed as createHybridResultEmbed } from './render.js';
 import { initializeSpriteCache, preloadEssentialSprites } from './sprites.js';
 import { 
   pocketToAngle, 

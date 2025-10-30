@@ -268,17 +268,14 @@ function verifySpinPlan(spinPlan) {
   return landingNumber === targetIndex;
 }
 
-// Export functions
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    computeSpinPlan,
-    getPocketFromAngle,
-    getPocketAngle,
-    angularDifference,
-    verifySpinPlan,
-    WHEEL_CONFIGURATIONS
-  };
-}
+export {
+  computeSpinPlan,
+  getPocketFromAngle,
+  getPocketAngle,
+  angularDifference,
+  verifySpinPlan,
+  WHEEL_CONFIGURATIONS,
+};
 
 // Export for browser usage
 if (typeof window !== 'undefined') {
