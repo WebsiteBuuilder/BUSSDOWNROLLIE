@@ -2,7 +2,7 @@ import { Client, Collection, Events, GatewayIntentBits, MessageFlags, REST, Rout
 import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 import { readdirSync, existsSync } from 'fs';
-import prisma, { initializeDatabase } from './db/index.js';
+import prisma, { initializeDatabase, prismaStatus } from './db/index.js';
 import { initLogger } from './lib/logger.js';
 import { handleBattleComponent, handleBattleSelect, isBattleInteraction } from './commands/battle.js';
 import { handleBlackjackInteraction } from './commands/blackjack.js';
@@ -267,17 +267,38 @@ async function registerCommands() {
 async function init() {
   try {
     assertConfig();
-    // Initialize database
-    await initializeDatabase();
-    console.log('✅ Database initialized');
 
-    try {
-      const ensured = await ensureGiveawayDatabaseReady();
-      if (!ensured) {
-        logger.warn('Giveaway database not initialized during startup; giveaway commands may be unavailable.');
+    let databaseReady = prismaStatus.available;
+
+    if (!prismaStatus.available) {
+      logger.warn('Prisma client unavailable; skipping database initialization. Database-backed features will be disabled.', {
+        err: prismaStatus.error,
+      });
+    } else {
+      try {
+        await initializeDatabase();
+        console.log('✅ Database initialized');
+      } catch (error) {
+        if (error?.code === 'PRISMA_UNAVAILABLE') {
+          databaseReady = false;
+          logger.warn('Prisma unavailable during database bootstrap; continuing without database features.', { err: error });
+        } else {
+          throw error;
+        }
       }
-    } catch (error) {
-      logger.warn('Failed to initialize giveaway database during startup', { err: error });
+    }
+
+    if (databaseReady) {
+      try {
+        const ensured = await ensureGiveawayDatabaseReady();
+        if (!ensured) {
+          logger.warn('Giveaway database not initialized during startup; giveaway commands may be unavailable.');
+        }
+      } catch (error) {
+        logger.warn('Failed to initialize giveaway database during startup', { err: error });
+      }
+    } else {
+      logger.warn('Skipping giveaway database initialization because Prisma is unavailable; giveaway commands may be disabled.');
     }
 
     // Load commands and events
