@@ -15,10 +15,12 @@
  * - Resource cleanup and memory management
  */
 
-const { parentPort, workerData, threadId } = require('worker_threads');
-const path = require('path');
-const os = require('os');
-const { EventEmitter } = require('events');
+import { parentPort, workerData, threadId } from 'worker_threads';
+import path from 'path';
+import os from 'os';
+import { EventEmitter } from 'events';
+import { createCanvas, loadImage } from 'canvas';
+import sharp from 'sharp';
 
 // ============================================================================
 // CONSTANTS AND CONFIGURATION

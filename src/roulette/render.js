@@ -8,10 +8,10 @@
  * @version 1.0.0
  */
 
-const { createCanvas, loadImage } = require('canvas');
-const sharp = require('sharp');
-const fs = require('fs').promises;
-const path = require('path');
+import { createCanvas, loadImage } from 'canvas';
+import sharp from 'sharp';
+import fs from 'fs/promises';
+import path from 'path';
 
 // Constants
 const HARD_SIZE_CAP = 3 * 1024 * 1024; // 3MB hard cap
