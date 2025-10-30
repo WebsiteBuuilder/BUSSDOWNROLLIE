@@ -28,13 +28,25 @@ timeout 30s npx prisma migrate deploy || {
   echo "⚠️  Database migrations failed, but continuing startup..."
 }
 
+# Validate native modules before launch
+if [ -f "/app/scripts/prebuild-validate.cjs" ]; then
+  echo "🧪 Verifying native module integrity..."
+  if ! node /app/scripts/prebuild-validate.cjs --verify-only; then
+    echo "🩹 Attempting automated repair of native modules..."
+    if ! node /app/scripts/prebuild-validate.cjs; then
+      echo "❌ Unable to repair native modules automatically."
+      exit 1
+    fi
+  fi
+fi
+
 # Pre-startup validation for Railway
 echo "🔍 Running Railway startup validation..."
 if [ -f "/health-check.js" ]; then
   echo "🏥 Starting health check server in background..."
   node /health-check.js &
   HEALTH_PID=$!
-  
+
   # Wait for health check to be ready
   echo "⏳ Waiting for health check server..."
   for i in $(seq 1 30); do
