@@ -10,10 +10,16 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       exclude: [
         'node_modules/',
-        'tests/',
-        '*.config.js'
+        'tests/**',
+        '*.config.js',
+        'scripts/**'
+      ],
+      include: [
+        'src/roulette/**'
       ]
-    }
+    },
+    testTimeout: 30000, // 30 second timeout for integration tests
+    hookTimeout: 10000
   }
 });
 

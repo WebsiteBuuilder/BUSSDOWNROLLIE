@@ -1,4 +1,7 @@
 import { MessageFlags } from 'discord.js';
+import { Worker } from 'worker_threads';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { getOrCreateUser, removeVP, addVP } from '../db/index.js';
 import { 
   createRoulettePromptEmbed, 
@@ -11,6 +14,26 @@ import {
   getNumberColor
 } from './simple-ui.js';
 import { createDetailedRulesEmbed } from './lobby-ui.js';
+import { AttachmentBuilder } from 'discord.js';
+import { safeReply, ackWithin3s } from '../utils/interaction.js';
+import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
+import { houseEdgeConfig } from '../config/casino.js';
+import { formatVP } from '../lib/utils.js';
+
+// Hybrid system imports
+import { computeSpinPlan } from './physics.js';
+import { createPlaceholderEmbed, createResultEmbed as createHybridResultEmbed, FRAME_DELAY } from './render.js';
+import { initializeSpriteCache, preloadEssentialSprites } from './sprites.js';
+import { 
+  pocketToAngle, 
+  angleToPocket, 
+  isRed, 
+  isBlack, 
+  isGreen,
+  getTotalPockets 
+} from './mapping.js';
+
+// Legacy animation for fallback only
 import { 
   generateCinematicSpin, 
   validateCinematicAnimation,
@@ -20,13 +43,61 @@ import {
   generateStaticRouletteImage,
   getEmergencyFallbackMessage
 } from './safe-canvas-utils.js';
-import { AttachmentBuilder } from 'discord.js';
-import { safeReply, ackWithin3s } from '../utils/interaction.js';
-import { getRoulettePocket, recordRouletteOutcome } from '../lib/house-edge.js';
-import { houseEdgeConfig } from '../config/casino.js';
-import { formatVP } from '../lib/utils.js';
+
+/**
+ * Hybrid Roulette Manager - Fully Integrated System
+ * 
+ * This module provides a fully integrated hybrid roulette system that combines:
+ * 1. **Physics Engine** - Realistic wheel and ball physics calculations
+ * 2. **Mapping System** - European/American roulette pocket mapping
+ * 3. **Sprite Cache** - Efficient asset management and caching
+ * 4. **Render Worker** - Off-thread WebP animation generation
+ * 5. **Legacy Fallback** - GIF-based animation for compatibility
+ * 6. **Static Fallback** - Emergency image fallback
+ * 
+ * Features:
+ * - Instant placeholder responses
+ * - Worker-based rendering (non-blocking)
+ * - WebP animations with size optimization
+ * - Automatic fallback chain (Hybrid → Legacy → Static)
+ * - 100% Discord command compatibility
+ * - Vouch Points integration with house edge
+ * - Rate-limited Discord interactions
+ * 
+ * @author GUHH EATS Development Team
+ * @version 2.0.0 - Hybrid System Integration
+ */
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ACTIVE_ROULETTE = new Map();
+
+// Rate limiter for Discord edits (max 4 per second)
+const EDIT_RATE_LIMITER = {
+  lastEdit: 0,
+  minInterval: 250, // 4 edits per second
+  
+  async canEdit() {
+    const now = Date.now();
+    const timeSinceLastEdit = now - this.lastEdit;
+    
+    if (timeSinceLastEdit >= this.minInterval) {
+      this.lastEdit = now;
+      return true;
+    }
+    
+    const waitTime = this.minInterval - timeSinceLastEdit;
+    await new Promise(resolve => setTimeout(resolve, waitTime));
+    this.lastEdit = Date.now();
+    return true;
+  },
+  
+  async editWithRateLimit(message, options) {
+    await this.canEdit();
+    return await message.edit(options);
+  }
+};
 
 const PAYOUTS = {
   'red': 2,
@@ -41,8 +112,30 @@ const PAYOUTS = {
   '3rd-12': 2
 };
 
+// Sprite cache initialization state
+let spriteCacheInitialized = false;
+
 function formatDisplayName(interaction) {
   return interaction.member?.displayName ?? interaction.user.username;
+}
+
+/**
+ * Ensure sprite cache is initialized for hybrid system
+ */
+async function ensureSpriteCacheInitialized() {
+  if (!spriteCacheInitialized) {
+    try {
+      console.log('🎨 Initializing sprite cache for hybrid system...');
+      await initializeSpriteCache();
+      await preloadEssentialSprites();
+      spriteCacheInitialized = true;
+      console.log('✅ Sprite cache initialized successfully');
+    } catch (error) {
+      console.warn('⚠️ Sprite cache initialization failed, continuing without cache:', error.message);
+      // Don't throw - continue without sprite cache
+      spriteCacheInitialized = true; // Mark as initialized to avoid retry
+    }
+  }
 }
 
 /**
@@ -73,6 +166,9 @@ export async function startRoulette(interaction) {
     const commandId = interaction.id;
 
     console.log(`🎰 Starting roulette for user ${userId}`);
+
+    // Initialize hybrid system components
+    await ensureSpriteCacheInitialized();
 
     await interaction.deferReply();
 
@@ -257,13 +353,6 @@ async function spinWheel(interaction, state, commandId) {
   // Remove the game from active games
   ACTIVE_ROULETTE.delete(commandId);
 
-  // Show instant loading embed
-  const spinMessage = await interaction.editReply({
-    embeds: [createLoadingSpinEmbed(state.displayName, state.totalBet)],
-    components: [],
-    files: []
-  });
-
   // Determine winning number
   const primaryBetType = Object.keys(state.bets)[0];
   let betDescriptor = {};
@@ -281,109 +370,19 @@ async function spinWheel(interaction, state, commandId) {
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
-  // Animate the wheel with cinematic effects (WITH INTELLIGENT FALLBACK)
+  // Try hybrid system first, fallback to legacy if needed
   let animationSuccess = false;
   let animationMetadata = null;
   
   try {
-    console.log(`🎬 [V2 PROFESSIONAL] Generating cinematic spin animation...`);
-    const startGen = Date.now();
-
-        const result = await generateCinematicSpin(pocket.number, {
-          duration: 8500,  // 8.5 seconds (optimized for file size)
-          fps: 16,         // 16 FPS (optimal balance)
-          quality: 8,      // 8 = better compression with octree
-          debugMode: false // Set to true for physics debugging
-        });
-
-    const gifBuffer = result.buffer;
-    animationMetadata = result.metadata;
-
-    const genTime = ((Date.now() - startGen) / 1000).toFixed(2);
-    console.log(`⚡ Generation complete in ${genTime}s - Size: ${animationMetadata.sizeMB}MB`);
-
-    const attachment = new AttachmentBuilder(gifBuffer, {
-      name: 'roulette-spin.gif',
-      description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
-    });
-
-    await spinMessage.edit({
-      embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
-      files: [attachment],
-      components: []
-    });
-
-    // Wait for animation to play (8.5 seconds)
-    const playDuration = animationMetadata.duration || 8500;
-    await new Promise(resolve => setTimeout(resolve, playDuration));
-
-    console.log(`✅ Cinematic animation completed | ${animationMetadata.frames} frames | ${animationMetadata.sizeMB}MB | ${animationMetadata.encodeTimeSeconds}s`);
+    const result = await runHybridSpinAnimation(interaction, state, pocket);
     animationSuccess = true;
+    animationMetadata = result.metadata;
+  } catch (hybridError) {
+    console.error('❌ Hybrid animation failed - attempting LEGACY FALLBACK');
+    console.error(`   Error: ${hybridError.message}`);
     
-  } catch (cinematicError) {
-    console.error('❌ Cinematic animation failed - attempting STATIC FALLBACK');
-    console.error(`   Error: ${cinematicError.message}`);
-    
-    // FALLBACK 1: Generate static result PNG
-    try {
-      const pngBuffer = await generateStaticRouletteImage(pocket.number);
-      const attachment = new AttachmentBuilder(pngBuffer, { 
-        name: 'roulette-result.png',
-        description: `STILL GUUHHHD Roulette - Number ${pocket.number}`
-      });
-      
-      await spinMessage.edit({
-        content: `🎡 **STILL GUUHHHD ROULETTE**\n\n✨ _The wheel has stopped!_ ✨`,
-        embeds: [],
-        files: [attachment],
-        components: []
-      });
-      
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      console.log('✅ Static PNG fallback displayed successfully');
-      animationSuccess = true;
-      
-    } catch (fallbackError) {
-      console.error('❌ Static PNG fallback also failed - attempting TEXT FALLBACK');
-      console.error(`   Fallback Error: ${fallbackError.message}`);
-      
-      // FALLBACK 2: Text-only emergency fallback
-      try {
-        const emergencyMessage = getEmergencyFallbackMessage(pocket.number);
-        
-        await spinMessage.edit({
-          ...emergencyMessage,
-          components: []
-        });
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        console.log('✅ Emergency text fallback displayed successfully');
-        animationSuccess = true;
-        
-      } catch (emergencyError) {
-        console.error('❌ CRITICAL: All fallbacks failed (GIF, PNG, TEXT)');
-        console.error(`   Emergency Error: ${emergencyError.message}`);
-        
-        // Last resort: Refund and show error
-        if (state.totalBet > 0) {
-          await addVP(state.userId, state.totalBet);
-          console.log(`💰 Refunded ${state.totalBet} VP to user ${state.userId}`);
-        }
-        
-        await spinMessage.edit({
-          content: '❌ **Roulette Animation System Error**\n\n' +
-                   'The wheel renderer encountered a critical error.\n\n' +
-                   `🔄 **Your bet of ${formatVP(state.totalBet)} has been fully refunded.**\n\n` +
-                   '⚠️ This is a system issue. Please contact an administrator.',
-          embeds: [],
-          components: []
-        });
-        
-        return; // Exit early, don't show results
-      }
-    }
+    animationSuccess = await runLegacySpinAnimation(interaction, state, pocket);
   }
 
   // Calculate winnings
@@ -412,27 +411,236 @@ async function spinWheel(interaction, state, commandId) {
   // Fetch updated balance
   const updatedUser = await getOrCreateUser(state.userId);
 
-  const resultEmbed = createResultEmbed({
+  // Show final result with rate limiting
+  const resultEmbed = createHybridResultEmbed({
     displayName: state.displayName,
     winningNumber: pocket.number,
     winningColor: pocket.color,
-    frame: `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`,
     didWin,
     net,
-    bets: state.bets,
-    houseEdge: houseEdgeConfig.roulette.baseEdge,
-    totalWon: totalWinnings,
     totalBet: state.totalBet,
+    totalWon: totalWinnings,
     newBalance: updatedUser.vp
-  });
+  }, animationMetadata);
 
-  await spinMessage.edit({ 
-    embeds: [resultEmbed], 
+  await EDIT_RATE_LIMITER.editWithRateLimit(
+    await interaction.fetchReply(),
+    { 
+      embeds: [resultEmbed], 
+      components: [],
+      files: []
+    }
+  );
+
+  console.log(`✅ Roulette game completed for ${state.displayName}`);
+}
+
+/**
+ * Run hybrid spin animation with worker-based rendering
+ * Uses new physics, mapping, sprites, and render systems
+ */
+async function runHybridSpinAnimation(interaction, state, pocket) {
+  console.log(`🎬 Starting hybrid animation for ${pocket.number} (${pocket.color})`);
+  
+  // Create and show instant placeholder embed
+  const placeholderEmbed = createPlaceholderEmbed(state.displayName, state.totalBet);
+  const spinMessage = await interaction.editReply({
+    embeds: [placeholderEmbed],
     components: [],
     files: []
   });
 
-  console.log(`✅ Roulette game completed for ${state.displayName}`);
+  // Initialize worker for rendering
+  const renderWorker = new Worker(
+    path.join(__dirname, 'render-worker.js'),
+    { type: 'module' }
+  );
+
+  // Wait for worker ready
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Worker initialization timeout')), 5000);
+    
+    renderWorker.on('message', (message) => {
+      if (message.type === 'ready') {
+        clearTimeout(timeout);
+        resolve();
+      }
+    });
+    
+    renderWorker.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+
+  try {
+    // Compute physics in main thread for immediate response
+    const spinPlan = computeSpinPlan(
+      pocket.number,
+      'european',
+      16, // fps
+      8500, // duration
+      30, // wheelRpm0
+      180, // ballRpm0
+      0.8, // kWheel
+      0.6, // kBall
+      15 // laps
+    );
+
+    console.log(`⚙️ Physics computed: ω₀=${(spinPlan.omega0 || 180 * 2 * Math.PI / 60).toFixed(2)}, k=${(spinPlan.k || 0.6)}`);
+
+    // Update placeholder with loading state
+    await EDIT_RATE_LIMITER.editWithRateLimit(spinMessage, {
+      embeds: [createLoadingSpinEmbed(state.displayName, state.totalBet)],
+      components: [],
+      files: []
+    });
+
+    // Request rendering from worker
+    const renderRequestId = Date.now().toString();
+    
+    const renderPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        renderWorker.terminate();
+        reject(new Error('Render timeout (10s exceeded)'));
+      }, 10000);
+      
+      renderWorker.on('message', (message) => {
+        if (message.id === renderRequestId && message.type === 'render-result') {
+          clearTimeout(timeout);
+          if (message.success) {
+            resolve(message);
+          } else {
+            reject(new Error(message.error || 'Unknown render error'));
+          }
+        }
+      });
+    });
+
+    renderWorker.postMessage({
+      type: 'render-animation',
+      id: renderRequestId,
+      spinPlan,
+      options: {
+        duration: 8500,
+        fps: 16,
+        quality: 8,
+        width: 800,
+        height: 600
+      }
+    });
+
+    // Wait for render completion with timeout
+    let renderResult;
+    try {
+      renderResult = await renderPromise;
+      console.log(`✅ Render completed: ${(renderResult.buffer.length / 1024 / 1024).toFixed(2)}MB`);
+    } catch (error) {
+      renderWorker.terminate();
+      throw error;
+    }
+
+    // Create WebP attachment (Discord supports WebP animations)
+    const attachment = new AttachmentBuilder(renderResult.buffer, {
+      name: 'roulette-spin.webp',
+      description: `STILL GUUHHHD Roulette - Number ${pocket.number} (${pocket.color}) - Hybrid System`
+    });
+
+    // Show animated WebP with rate limiting
+    await EDIT_RATE_LIMITER.editWithRateLimit(spinMessage, {
+      embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
+      files: [attachment],
+      components: []
+    });
+
+    // Wait for animation to play
+    await new Promise(resolve => setTimeout(resolve, 8500));
+
+    // Clean up worker
+    renderWorker.terminate();
+
+    return {
+      success: true,
+      metadata: {
+        format: 'webp',
+        frames: renderResult.metadata?.frames || 136,
+        sizeMB: (renderResult.buffer.length / 1024 / 1024).toFixed(2),
+        omega0: spinPlan.omega0 || 180 * 2 * Math.PI / 60,
+        k: spinPlan.k || 0.6,
+        duration: 8500
+      }
+    };
+    
+  } catch (error) {
+    renderWorker.terminate();
+    console.error(`❌ Hybrid animation failed: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Fallback to legacy animation system (GIF-based)
+ * Only used when hybrid system fails
+ */
+async function runLegacySpinAnimation(interaction, state, pocket) {
+  console.log(`🔄 Attempting legacy animation fallback for ${pocket.number}`);
+  
+  try {
+    const spinMessage = await interaction.editReply({
+      embeds: [createLoadingSpinEmbed(state.displayName, state.totalBet)],
+      components: [],
+      files: []
+    });
+
+    // Use existing cinematic animation system (GIF-based)
+    const result = await generateCinematicSpin(pocket.number, {
+      duration: 8500,
+      fps: 16,
+      quality: 8,
+      debugMode: false
+    });
+
+    const gifBuffer = result.buffer;
+    const animationMetadata = result.metadata;
+
+    const attachment = new AttachmentBuilder(gifBuffer, {
+      name: 'roulette-spin.gif',
+      description: `STILL GUUHHHD Roulette - Number ${pocket.number} (${pocket.color}) - Legacy GIF System`
+    });
+
+    await EDIT_RATE_LIMITER.editWithRateLimit(spinMessage, {
+      embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
+      files: [attachment],
+      components: []
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 8500));
+
+    console.log(`✅ Legacy animation successful`);
+    return true;
+  } catch (error) {
+    console.error('❌ Legacy animation also failed:', error);
+    
+    // Final fallback: static image
+    try {
+      const fallbackImage = await generateStaticRouletteImage(pocket.number);
+      const attachment = new AttachmentBuilder(fallbackImage, {
+        name: 'roulette-static.png',
+        description: `STILL GUUHHHD Roulette - Number ${pocket.number} (${pocket.color}) - Static Fallback`
+      });
+      
+      await interaction.editReply({
+        embeds: [createCinematicSpinEmbed(state.displayName, state.totalBet)],
+        files: [attachment],
+        components: []
+      });
+      
+      return true;
+    } catch (finalError) {
+      console.error('❌ Even static fallback failed:', finalError);
+      return false;
+    }
+  }
 }
 
 function checkBetWin(betType, winningNumber, winningColor) {
@@ -472,19 +680,26 @@ async function updateBettingUI(interaction, state, commandId, currentBalance = n
     const embed = createRoulettePromptEmbed(state.displayName, state.totalBet, state.bets, currentBalance);
     const components = createBettingButtons(commandId, state.selectedChip);
 
-    await interaction.editReply({
-      embeds: [embed],
-      components: components,
-    });
+    // Use rate-limited edit
+    await EDIT_RATE_LIMITER.editWithRateLimit(
+      await interaction.fetchReply(),
+      {
+        embeds: [embed],
+        components: components,
+      }
+    );
   } catch (error) {
     console.error('❌ Error updating betting UI:', error);
     // Attempt to recover
     try {
-      await interaction.editReply({
-        content: '⚠️ There was an error updating the UI. Please try again.',
-        embeds: [],
-        components: []
-      });
+      await EDIT_RATE_LIMITER.editWithRateLimit(
+        await interaction.fetchReply(),
+        {
+          content: '⚠️ There was an error updating the UI. Please try again.',
+          embeds: [],
+          components: []
+        }
+      );
     } catch (recoverError) {
       console.error('❌ Failed to recover from UI error:', recoverError);
     }
@@ -499,4 +714,38 @@ export async function showRouletteRules(interaction) {
     console.error('❌ Error showing roulette rules:', error);
     await interaction.reply({ content: '❌ Failed to load rules. Please try again.', flags: MessageFlags.Ephemeral });
   }
+}
+
+/**
+ * Get hybrid system health status
+ */
+export function getHybridSystemStatus() {
+  return {
+    spriteCache: spriteCacheInitialized,
+    activeWorkers: 0, // Could track this if needed
+    system: 'hybrid',
+    version: '1.0.0'
+  };
+}
+
+/**
+ * Force reinitialize sprite cache (for debugging)
+ */
+export async function reinitializeSpriteCache() {
+  spriteCacheInitialized = false;
+  await ensureSpriteCacheInitialized();
+}
+
+/**
+ * Get system information for debugging
+ */
+export function getSystemInfo() {
+  return {
+    activeGames: ACTIVE_ROULETTE.size,
+    spriteCacheInitialized,
+    hybridSystemEnabled: true,
+    discordInterface: 'compatible',
+    animationFormats: ['webp', 'gif', 'png'],
+    fallbackLevels: ['hybrid', 'legacy-gif', 'static']
+  };
 }
