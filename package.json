@@ -25,9 +25,10 @@
     "railway:setup": "railway link && railway up",
     "railway:logs": "railway logs",
     "railway:status": "railway status",
-    "rebuild:all": "npm rebuild canvas sharp gifencoder",
+    "rebuild:all": "npm rebuild --build-from-source canvas && npm rebuild sharp && npm rebuild gifencoder",
     "install:deps": "npm install --save canvas gifencoder sharp",
-    "validate:full": "npm run prebuild && npm run build"
+    "validate:full": "npm run prebuild && npm run build",
+    "verify:native": "node scripts/prebuild-validate.cjs --verify-only"
   },
   "keywords": [
     "discord",
