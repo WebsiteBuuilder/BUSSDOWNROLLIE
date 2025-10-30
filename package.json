@@ -24,7 +24,10 @@
     "system:validate": "node scripts/system-requirements.js",
     "railway:setup": "railway link && railway up",
     "railway:logs": "railway logs",
-    "railway:status": "railway status"
+    "railway:status": "railway status",
+    "rebuild:all": "npm rebuild canvas sharp gifencoder",
+    "install:deps": "npm install --save canvas gifencoder sharp",
+    "validate:full": "npm run prebuild && npm run build"
   },
   "keywords": [
     "discord",
@@ -40,6 +43,7 @@
     "canvas": "^2.11.2",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
+    "gifencoder": "^2.0.1",
     "sharp": "^0.33.2",
     "tslib": "^2.6.2"
   },
