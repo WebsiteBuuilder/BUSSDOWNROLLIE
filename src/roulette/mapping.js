@@ -167,44 +167,6 @@ function isGreen(pocketNumber) {
   return pocketNumber === 0 || pocketNumber === '00';
 }
 
-// Export all functions and constants
-module.exports = {
-  // Constants
-  pocketOrderEU,
-  pocketOrderUS,
-  RED_POCKETS_EU,
-  RED_POCKETS_US,
-  
-  // Main functions
-  pocketAngle,
-  hitTest,
-  angleToPocket,
-  pocketToAngle,
-  
-  // Utility functions
-  pocketIndex,
-  getPocketOrder,
-  getTotalPockets,
-  isRed,
-  isBlack,
-  isGreen,
-  
-  // Unit test exports for comprehensive testing
-  tests: {
-    testPocketAngle,
-    testHitTest,
-    testAngleToPocket,
-    testPocketToAngle,
-    testPocketIndex,
-    testGetPocketOrder,
-    testGetTotalPockets,
-    testIsRed,
-    testIsBlack,
-    testIsGreen,
-    runAllTests
-  }
-};
-
 /**
  * Unit Test Functions
  */
@@ -710,6 +672,34 @@ function runAllTests() {
   });
   
   results.passRate = ((results.passed / results.total) * 100).toFixed(2);
-  
+
   return results;
 }
+
+export {
+  pocketOrderEU,
+  pocketOrderUS,
+  RED_POCKETS_EU,
+  RED_POCKETS_US,
+  pocketAngle,
+  hitTest,
+  angleToPocket,
+  pocketToAngle,
+  pocketIndex,
+  getPocketOrder,
+  getTotalPockets,
+  isRed,
+  isBlack,
+  isGreen,
+  testPocketAngle,
+  testHitTest,
+  testAngleToPocket,
+  testPocketToAngle,
+  testPocketIndex,
+  testGetPocketOrder,
+  testGetTotalPockets,
+  testIsRed,
+  testIsBlack,
+  testIsGreen,
+  runAllTests,
+};

@@ -8,10 +8,31 @@
  * @version 1.0.0
  */
 
-import { createCanvas, loadImage } from 'canvas';
-import sharp from 'sharp';
 import fs from 'fs/promises';
 import path from 'path';
+import {
+    canvasAvailable,
+    sharpAvailable,
+    getCanvasModule,
+    getSharpModule,
+    getNativeDependencyStatus,
+} from './native-deps.js';
+
+let createCanvasFn = null;
+let loadImageFn = null;
+let sharpInstance = null;
+
+if (canvasAvailable) {
+    const canvasModule = getCanvasModule();
+    createCanvasFn = canvasModule.createCanvas;
+    loadImageFn = canvasModule.loadImage;
+}
+
+if (sharpAvailable) {
+    sharpInstance = getSharpModule();
+}
+
+export const renderRuntimeStatus = getNativeDependencyStatus();
 
 // Constants
 const HARD_SIZE_CAP = 3 * 1024 * 1024; // 3MB hard cap
@@ -75,6 +96,10 @@ function initPathCache(ctx) {
  * const frames = await renderFrames(plan, sprites, 720);
  */
 async function renderFrames(plan, sprites, size = DEFAULT_SIZE) {
+    if (!renderRuntimeStatus.canvasAvailable) {
+        throw new Error('Canvas dependency is unavailable. Install optional native modules to enable hybrid roulette rendering.');
+    }
+
     const startTime = Date.now();
     
     try {
@@ -92,7 +117,7 @@ async function renderFrames(plan, sprites, size = DEFAULT_SIZE) {
         const frameCount = Math.ceil((plan.duration || 2000) / 1000 * fps);
 
         // Create canvas
-        const canvas = createCanvas(size, size);
+        const canvas = createCanvasFn(size, size);
         const ctx = canvas.getContext('2d');
         
         // Initialize path cache for performance
@@ -803,6 +828,10 @@ function renderRibbonOverlay(ctx, size) {
  * console.log(`Format: ${encoded.format}, Size: ${encoded.size} bytes`);
  */
 async function encodeAnimatedWebP(frames, fps, budgetBytes = TARGET_SIZE) {
+    if (!renderRuntimeStatus.sharpAvailable) {
+        throw new Error('Sharp dependency is unavailable. Install optional native modules to enable hybrid roulette rendering.');
+    }
+
     const startTime = Date.now();
 
     try {
@@ -865,7 +894,7 @@ async function tryWebPEncoding(frames, frameDelay, budgetBytes) {
         };
 
         // Create animated WebP
-        const webpBuffer = await sharp({
+        const webpBuffer = await sharpInstance({
             create: {
                 width: frames[0].width || 720,
                 height: frames[0].height || 720,
@@ -914,7 +943,7 @@ async function tryReducedQualityEncoding(frames, frameDelay, budgetBytes) {
     
     for (const quality of qualitySteps) {
         try {
-            const webpBuffer = await sharp({
+            const webpBuffer = await sharpInstance({
                 create: {
                     width: frames[0].width || 720,
                     height: frames[0].height || 720,
@@ -970,7 +999,7 @@ async function tryReducedFrameCount(frames, frameDelay, budgetBytes) {
                 index === frames.length - 1
             );
 
-            const webpBuffer = await sharp({
+            const webpBuffer = await sharpInstance({
                 create: {
                     width: frames[0].width || 720,
                     height: frames[0].height || 720,
@@ -1023,7 +1052,7 @@ async function tryAPNGEncoding(frames, frameDelay, budgetBytes) {
         // a dedicated APNG encoder
         
         const pngBuffers = await Promise.all(
-            frames.map(frame => sharp(frame).png({ compressionLevel: 9 }).toBuffer())
+            frames.map(frame => sharpInstance(frame).png({ compressionLevel: 9 }).toBuffer())
         );
 
         // Combine PNG frames into a simple format
@@ -1269,8 +1298,7 @@ function getColorEmoji(color) {
     }
 }
 
-// Export functions
-module.exports = {
+export {
     renderFrames,
     encodeAnimatedWebP,
     saveAnimation,
@@ -1278,13 +1306,11 @@ module.exports = {
     renderAnimation,
     createPlaceholderEmbed,
     createResultEmbed,
-    constants: {
-        HARD_SIZE_CAP,
-        TARGET_SIZE,
-        DEFAULT_SIZE,
-        MIN_SIZE,
-        MAX_FPS,
-        MIN_FPS,
-        REDUCTION_STEP
-    }
+    HARD_SIZE_CAP,
+    TARGET_SIZE,
+    DEFAULT_SIZE,
+    MIN_SIZE,
+    MAX_FPS,
+    MIN_FPS,
+    REDUCTION_STEP,
 };

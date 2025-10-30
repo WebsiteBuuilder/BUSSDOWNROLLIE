@@ -5,9 +5,32 @@
  * @version 1.0.0
  */
 
-import { createCanvas, loadImage } from 'canvas';
 import fs from 'fs/promises';
 import path from 'path';
+import { canvasAvailable, getCanvasModule } from './native-deps.js';
+import { logger } from '../logger.js';
+
+let createCanvasFn = null;
+let loadImageFn = null;
+
+if (canvasAvailable) {
+  const canvasModule = getCanvasModule();
+  createCanvasFn = canvasModule.createCanvas;
+  loadImageFn = canvasModule.loadImage;
+}
+
+function assertCanvasAvailable(context) {
+  if (!canvasAvailable || !createCanvasFn || !loadImageFn) {
+    const message =
+      'Canvas dependency is unavailable. Install the optional native dependencies to enable roulette sprite rendering.';
+    if (context) {
+      logger.warn(`${context}: ${message}`);
+    } else {
+      logger.warn(message);
+    }
+    throw new Error(message);
+  }
+}
 
 /**
  * Cache statistics and monitoring interface
@@ -168,6 +191,8 @@ class SpriteCache {
    * @throws {Error} If sprite generation fails
    */
   async _generateSprite(spriteKey) {
+    assertCanvasAvailable('SpriteCache._generateSprite');
+
     const config = this.configs.get(spriteKey);
     if (!config) {
       throw new Error(`Unknown sprite key: ${spriteKey}`);
@@ -202,7 +227,7 @@ class SpriteCache {
    * @returns {Promise<any>} Generated wheel base canvas
    */
   async _generateWheelBase(width, height) {
-    const canvas = createCanvas(width, height);
+    const canvas = createCanvasFn(width, height);
     const ctx = canvas.getContext('2d');
     
     // Calculate wheel dimensions
@@ -498,7 +523,7 @@ class SpriteCache {
    * @returns {Promise<any>} Generated numbers overlay canvas
    */
   async _generateNumbersOverlay(width, height) {
-    const canvas = createCanvas(width, height);
+    const canvas = createCanvasFn(width, height);
     const ctx = canvas.getContext('2d');
     
     // Clear canvas
@@ -550,7 +575,7 @@ class SpriteCache {
    * @returns {Promise<any>} Generated pocket mask canvas
    */
   async _generatePocketMask(width, height) {
-    const canvas = createCanvas(width, height);
+    const canvas = createCanvasFn(width, height);
     const ctx = canvas.getContext('2d');
     
     // Set up mask (black and white only)
@@ -589,7 +614,7 @@ class SpriteCache {
    * @returns {Promise<any>} Generated ball sprite canvas
    */
   async _generateBallSprite(width, height) {
-    const canvas = createCanvas(width, height);
+    const canvas = createCanvasFn(width, height);
     const ctx = canvas.getContext('2d');
     
     const centerX = width / 2;
@@ -740,7 +765,7 @@ class SpriteCache {
    * @returns {Promise<any>} Generated pocket colors canvas
    */
   async _generatePocketColors(width, height) {
-    const canvas = createCanvas(width, height);
+    const canvas = createCanvasFn(width, height);
     const ctx = canvas.getContext('2d');
     
     const centerX = width / 2;
@@ -1172,7 +1197,13 @@ export function getSpriteCache() {
  * @returns {Promise<void>}
  */
 export async function initializeSpriteCache() {
-  return await spriteCache.initialize();
+  if (!canvasAvailable) {
+    logger.warn('Skipping sprite cache initialization because canvas is unavailable.');
+    return false;
+  }
+
+  await spriteCache.initialize();
+  return true;
 }
 
 /**
@@ -1212,7 +1243,12 @@ export function clearVolatile() {
  * @returns {Promise<void>}
  */
 export async function preloadEssentialSprites() {
-  return await spriteCache.preloadEssential();
+  if (!canvasAvailable) {
+    logger.warn('Skipping sprite preload because canvas is unavailable.');
+    return;
+  }
+
+  await spriteCache.preloadEssential();
 }
 
 /**
