@@ -36,12 +36,11 @@ export function createCardDisplay(card, isHidden = false) {
  */
 export function createHandDisplay(hand, hideFirst = false, handName = 'Hand') {
   if (hideFirst && hand.length > 1) {
-    const [dealerUpCard, ...remainingCards] = hand;
-    const hiddenAndVisible = remainingCards.map((card, index) => (index === 0 ? '🂠' : createCardDisplay(card)));
-    return [createCardDisplay(dealerUpCard), ...hiddenAndVisible].join(' ').trim();
+    const [, ...visibleCards] = hand;
+    return ['🂠', ...visibleCards.map((card) => createCardDisplay(card))].join(' ');
   }
 
-  const cards = hand.map(card => createCardDisplay(card));
+  const cards = hand.map((card) => createCardDisplay(card));
   return cards.join(' ');
 }
 
