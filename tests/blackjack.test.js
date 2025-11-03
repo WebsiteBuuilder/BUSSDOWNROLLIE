@@ -90,14 +90,20 @@ describe('Blackjack Engine', () => {
       expect(formatHand(hand)).toBe('A♠️ K♥️');
     });
 
-    it('should hide first card when specified', () => {
+    it('should hide dealer hole card while preserving the up-card', () => {
       const hand = [
         { rank: 'A', suit: '♠️' },
         { rank: 'K', suit: '♥️' },
         { rank: '5', suit: '♦️' },
       ];
-      expect(formatHand(hand, true)).toContain('🃏');
-      expect(formatHand(hand, true)).toContain('K♥️');
+      expect(formatHand(hand, true)).toBe('A♠️ 🃏 5♦️');
+    });
+
+    it('should not hide anything if there is no hole card yet', () => {
+      const hand = [
+        { rank: 'A', suit: '♠️' },
+      ];
+      expect(formatHand(hand, true)).toBe('A♠️');
     });
   });
 

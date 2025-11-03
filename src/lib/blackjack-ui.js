@@ -34,23 +34,30 @@ export function createCardDisplay(card, isHidden = false) {
 /**
  * Create hand display with visual cards
  */
-export function createHandDisplay(hand, hideFirst = false, handName = 'Hand') {
-  if (hideFirst && hand.length > 1) {
-    const visibleCards = hand.slice(1).map(card => createCardDisplay(card));
-    return `🂠 ${visibleCards.join(' ')}`;
+export function createHandDisplay(hand, hideHoleCard = false, handName = 'Hand') {
+  if (!hideHoleCard) {
+    return hand.map((card) => createCardDisplay(card)).join(' ');
   }
-  
-  const cards = hand.map(card => createCardDisplay(card));
-  return cards.join(' ');
+
+  return hand
+    .map((card, index) => {
+      if (index === 1) {
+        return '🂠';
+      }
+
+      return createCardDisplay(card);
+    })
+    .join(' ')
+    .trim();
 }
 
 /**
  * Create enhanced game UI embed
  */
 export function createGameUIEmbed(gameState, user, playerValue, dealerShowingValue, hasPeeked = false) {
-  const dealerHandDisplay = hasPeeked 
+  const dealerHandDisplay = hasPeeked
     ? createHandDisplay(gameState.dealerHand, false) // Show all cards if peeked
-    : createHandDisplay(gameState.dealerHand, true);  // Hide first card if not peeked
+    : createHandDisplay(gameState.dealerHand, true);  // Hide the dealer's hole card if not peeked
   
   const dealerValueText = hasPeeked 
     ? `**Total:** \`${calculateHandValue(gameState.dealerHand)}\``

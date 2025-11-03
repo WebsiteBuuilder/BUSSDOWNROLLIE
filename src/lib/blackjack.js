@@ -68,11 +68,21 @@ export function formatCard(card) {
 /**
  * Format hand for display
  */
-export function formatHand(hand, hideFirst = false) {
-  if (hideFirst) {
-    return `🃏 ${hand.slice(1).map(formatCard).join(' ')}`;
+export function formatHand(hand, hideHoleCard = false) {
+  if (!hideHoleCard) {
+    return hand.map(formatCard).join(' ');
   }
-  return hand.map(formatCard).join(' ');
+
+  return hand
+    .map((card, index) => {
+      if (index === 1) {
+        return '🃏';
+      }
+
+      return formatCard(card);
+    })
+    .join(' ')
+    .trim();
 }
 
 /**
