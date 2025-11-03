@@ -11,6 +11,7 @@ import { GSTART_MODAL_ID, handleGstartModalSubmit } from './commands/gstart.js';
 import { handleApproveVouchButton } from './commands/approvevouch.js';
 import { config as botConfig, assertConfig } from './config.js';
 import { logger } from './logger.js';
+import { startNetworkServer } from './server.js';
 import { runStartupValidation } from './utils/startup-validator.js';
 import { validateCinematicAnimation, getAnimationStatus } from './roulette/safe-animation.js';
 import { ensureTypescriptBuild, distSrcDir } from './utils/typescript-runtime.js';
@@ -148,6 +149,14 @@ async function loadGiveawayHandlers() {
   }
 }
 
+const bootStartedAt = Date.now();
+const networkServerPromise = startNetworkServer({ bootStartedAt }).catch((error) => {
+  console.error('❌ Failed to start network server', error);
+  process.exit(1);
+});
+
+void networkServerPromise;
+
 const giveawayModuleReady = loadGiveawayHandlers();
 
 // Create Discord client
@@ -265,30 +274,51 @@ async function registerCommands() {
  * Initialize bot
  */
 async function init() {
+  let canLogin = true;
+
   try {
     assertConfig();
-    // Initialize database
+  } catch (error) {
+    canLogin = false;
+    logger.error('bot configuration invalid; skipping Discord login', { err: error });
+  }
+
+  try {
     await initializeDatabase();
     console.log('✅ Database initialized');
-
-    try {
-      const ensured = await ensureGiveawayDatabaseReady();
-      if (!ensured) {
-        logger.warn('Giveaway database not initialized during startup; giveaway commands may be unavailable.');
-      }
-    } catch (error) {
-      logger.warn('Failed to initialize giveaway database during startup', { err: error });
-    }
-
-    // Load commands and events
-    await loadCommands();
-    await loadEvents();
-
-    // Login to Discord
-    await client.login(botConfig.token);
   } catch (error) {
-    logger.error('failed to initialize bot', { err: error });
-    process.exit(1);
+    logger.error('failed to initialize database; continuing in degraded mode', { err: error });
+  }
+
+  try {
+    const ensured = await ensureGiveawayDatabaseReady();
+    if (!ensured) {
+      logger.warn('Giveaway database not initialized during startup; giveaway commands may be unavailable.');
+    }
+  } catch (error) {
+    logger.warn('Failed to initialize giveaway database during startup', { err: error });
+  }
+
+  try {
+    await loadCommands();
+  } catch (error) {
+    logger.error('failed to load command modules during startup', { err: error });
+  }
+
+  try {
+    await loadEvents();
+  } catch (error) {
+    logger.error('failed to load event handlers during startup', { err: error });
+  }
+
+  if (canLogin) {
+    try {
+      await client.login(botConfig.token);
+    } catch (error) {
+      logger.error('failed to authenticate with Discord', { err: error });
+    }
+  } else {
+    logger.warn('Discord login skipped because configuration is invalid.');
   }
 }
 
@@ -468,6 +498,9 @@ process.on('unhandledRejection', (reason, promise) => {
 // Start the bot with validation
 (async () => {
   try {
+    await networkServerPromise;
+    logger.info('network server confirmed listening before bot initialization');
+
     // Run startup validation
     await runStartupValidation();
     
@@ -488,8 +521,7 @@ process.on('unhandledRejection', (reason, promise) => {
     // Initialize bot
     await init();
   } catch (error) {
-    console.error('❌ Fatal startup error:', error);
-    process.exit(1);
+    logger.error('fatal startup error during bot bootstrap', { err: error });
   }
 })();
 
