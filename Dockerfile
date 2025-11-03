@@ -12,17 +12,33 @@ ENV NODE_ENV=development \
 # Install build prerequisites and native deps for canvas/gifencoder/sharp
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    python3 \
-    make \
+    ca-certificates \
+    curl \
+    git \
     g++ \
+    make \
+    pkg-config \
+    python3 \
+    python3-pip \
     libcairo2-dev \
     libpixman-1-dev \
     libpango1.0-dev \
     libjpeg-dev \
+    libpng-dev \
     libgif-dev \
     librsvg2-dev \
-    pkg-config \
+    libfreetype6-dev \
+    fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
+
+ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig \
+    npm_config_python=/usr/bin/python3 \
+    npm_config_build_from_source=true
+
+RUN ln -sf /usr/bin/python3 /usr/bin/python \
+  && pkg-config --libs cairo \
+  && pkg-config --libs pixman-1 \
+  && pkg-config --libs pangocairo
 
 WORKDIR /app
 
@@ -33,7 +49,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci || npm install --legacy-peer-deps || npm install --force --legacy-peer-deps
 
 # Ensure native bindings are compiled
-RUN npm rebuild --build-from-source canvas && \
+RUN npm rebuild canvas && \
     (npm rebuild sharp || true)
 
 # Copy the rest of the project
