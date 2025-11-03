@@ -9,6 +9,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 process.chdir(PROJECT_ROOT);
@@ -24,14 +25,66 @@ function logWithEmoji(emoji, message) {
   console.log(`${emoji} [prebuild] ${message}`);
 }
 
-function runCommand(command, description) {
+function runCommand(command, description, options = {}) {
   logWithEmoji('⚙️', `${description} (${command})`);
   try {
-    execSync(command, { stdio: 'inherit' });
+    execSync(command, {
+      stdio: 'inherit',
+      env: { ...process.env, ...(options.env || {}) },
+      cwd: options.cwd || PROJECT_ROOT
+    });
     logWithEmoji('✅', `${description} succeeded`);
     return true;
   } catch (error) {
     logWithEmoji('❌', `${description} failed: ${error.message}`);
+    return false;
+  }
+}
+
+function removeDirectory(targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    return;
+  }
+
+  fs.rmSync(targetPath, { recursive: true, force: true });
+}
+
+function purgeModule(moduleName) {
+  const moduleRoot = path.join(PROJECT_ROOT, 'node_modules', moduleName);
+  const pnpmStore = path.join(
+    PROJECT_ROOT,
+    'node_modules',
+    '.pnpm'
+  );
+
+  removeDirectory(moduleRoot);
+
+  if (fs.existsSync(pnpmStore)) {
+    const entries = fs.readdirSync(pnpmStore);
+    for (const entry of entries) {
+      if (entry.startsWith(`${moduleName}@`)) {
+        removeDirectory(path.join(pnpmStore, entry));
+      }
+    }
+  }
+}
+
+function ensureNodeGypCache() {
+  const cacheRoot = path.join(os.homedir(), '.cache', 'node-gyp');
+  if (!fs.existsSync(cacheRoot)) {
+    fs.mkdirSync(cacheRoot, { recursive: true });
+  }
+}
+
+function checkPkgConfig(pkg) {
+  try {
+    execSync(`pkg-config --libs ${pkg}`, { stdio: 'ignore' });
+    return true;
+  } catch (error) {
+    logWithEmoji(
+      '⚠️',
+      `pkg-config could not resolve "${pkg}". Ensure the corresponding *-dev package is installed.`
+    );
     return false;
   }
 }
@@ -42,6 +95,15 @@ function clearRequireCache(moduleName) {
     delete require.cache[resolved];
   } catch (error) {
     // Ignore resolution errors – caller will handle.
+  }
+}
+
+function getModuleRoot(moduleName) {
+  try {
+    const manifest = require.resolve(`${moduleName}/package.json`);
+    return path.dirname(manifest);
+  } catch (error) {
+    return path.join(PROJECT_ROOT, 'node_modules', moduleName);
   }
 }
 
@@ -73,9 +135,11 @@ async function testCanvas() {
     throw new Error('canvas.toBuffer returned empty buffer');
   }
 
-  const bindingPath = path.resolve(
-    path.dirname(require.resolve('canvas')),
-    '../build/Release/canvas.node'
+  const bindingPath = path.join(
+    getModuleRoot('canvas'),
+    'build',
+    'Release',
+    'canvas.node'
   );
 
   if (!fs.existsSync(bindingPath)) {
@@ -139,14 +203,76 @@ const MODULES = [
     tester: testCanvas,
     repairs: [
       {
-        description: 'Rebuilding canvas from source',
-        command: 'npm rebuild --build-from-source canvas'
+        description: 'Ensuring pkg-config dependencies are resolvable',
+        run() {
+          const pkgs = [
+            'cairo',
+            'pangocairo',
+            'pango',
+            'pixman-1',
+            'freetype2'
+          ];
+          return pkgs.every((pkg) => checkPkgConfig(pkg));
+        }
       },
       {
-        description: 'Reinstalling canvas with legacy peer deps',
-        command: `npm install canvas@${getExpectedVersion(
-          'canvas'
-        )} --force --legacy-peer-deps`
+        description: 'Rebuilding canvas from source',
+        command: 'npm rebuild canvas',
+        options: {
+          env: { npm_config_build_from_source: 'true', JOBS: '1' }
+        }
+      },
+      {
+        description: 'Forcing clean install of canvas from source',
+        run() {
+          const version = getExpectedVersion('canvas');
+          purgeModule('canvas');
+          const installCommand = `npm install canvas@${version} --ignore-scripts --force`;
+          const fetched = runCommand(installCommand, 'Fetching canvas sources');
+          if (!fetched) {
+            return false;
+          }
+
+          const moduleRoot = getModuleRoot('canvas');
+          if (!fs.existsSync(moduleRoot)) {
+            throw new Error('Canvas module root missing after reinstall');
+          }
+
+          const buildDir = path.join(moduleRoot, 'build');
+          fs.mkdirSync(buildDir, { recursive: true });
+          fs.mkdirSync(path.join(buildDir, 'Release'), { recursive: true });
+          fs.mkdirSync(path.join(buildDir, 'Release', 'obj.target'), {
+            recursive: true
+          });
+          fs.mkdirSync(
+            path.join(
+              buildDir,
+              'Release',
+              '.deps',
+              'Release',
+              'obj.target',
+              'canvas',
+              'src',
+              'backend'
+            ),
+            { recursive: true }
+          );
+
+          return (
+            runCommand(
+              'npx node-pre-gyp configure',
+              'Configuring canvas with node-pre-gyp',
+              {
+                cwd: moduleRoot,
+                env: { npm_config_build_from_source: 'true', JOBS: '1' }
+              }
+            ) &&
+            runCommand('npx node-pre-gyp build', 'Building canvas sources', {
+              cwd: moduleRoot,
+              env: { npm_config_build_from_source: 'true', JOBS: '1' }
+            })
+          );
+        }
       }
     ]
   },
@@ -196,7 +322,29 @@ async function ensureModule(moduleInfo) {
     }
 
     for (const repair of repairs) {
-      const success = runCommand(repair.command, repair.description);
+      let success = false;
+      if (typeof repair.run === 'function') {
+        try {
+          success = repair.run();
+          if (success) {
+            logWithEmoji('✅', `${repair.description} succeeded`);
+          } else {
+            logWithEmoji('⚠️', `${repair.description} did not resolve the issue`);
+          }
+        } catch (error) {
+          logWithEmoji(
+            '❌',
+            `${repair.description} threw an error: ${error.message}`
+          );
+        }
+      } else {
+        success = runCommand(
+          repair.command,
+          repair.description,
+          repair.options || { env: repair.env }
+        );
+      }
+
       if (!success) {
         continue;
       }
@@ -225,10 +373,15 @@ async function ensureModule(moduleInfo) {
 }
 
 async function main() {
+  ensureNodeGypCache();
   logWithEmoji('🚀', 'Starting native module self-check');
   logWithEmoji(
     'ℹ️',
     `Mode: ${verifyOnly ? 'verification-only (no repairs)' : 'self-healing'} \n`
+  );
+  logWithEmoji(
+    '🧭',
+    `Detected runtime: ${process.platform}-${process.arch} (Node ${process.version})`
   );
 
   const failures = [];
