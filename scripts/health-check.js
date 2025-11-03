@@ -14,7 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = join(__dirname, '..');
 
-const PORT = process.env.PORT || 3000;
+const HEALTH_PORT = process.env.HEALTH_PORT || 3001;
+const APP_PORT = process.env.PORT || 3000;
 
 let healthStatus = {
   status: 'starting',
@@ -157,7 +158,11 @@ function createHealthServer() {
       // Readiness probe - check if app is ready to accept traffic
       const isReady = healthStatus.status === 'healthy';
       res.writeHead(isReady ? 200 : 503, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ready: isReady, timestamp: new Date().toISOString() }));
+      res.end(JSON.stringify({
+        ready: isReady,
+        timestamp: new Date().toISOString(),
+        targetPort: APP_PORT
+      }));
       return;
     }
 
@@ -178,11 +183,11 @@ function createHealthServer() {
     res.end(JSON.stringify({ error: 'Not found', timestamp: new Date().toISOString() }));
   });
 
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🏥 Health check server running on port ${PORT}`);
-    console.log(`📊 Health endpoint: http://localhost:${PORT}/health`);
-    console.log(`✅ Ready endpoint: http://localhost:${PORT}/ready`);
-    console.log(`📈 Metrics endpoint: http://localhost:${PORT}/metrics`);
+  server.listen(HEALTH_PORT, '0.0.0.0', () => {
+    console.log(`🏥 Health check server running on port ${HEALTH_PORT}`);
+    console.log(`📊 Health endpoint: http://localhost:${HEALTH_PORT}/health`);
+    console.log(`✅ Ready endpoint: http://localhost:${HEALTH_PORT}/ready`);
+    console.log(`📈 Metrics endpoint: http://localhost:${HEALTH_PORT}/metrics`);
   });
 
   // Graceful shutdown

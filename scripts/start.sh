@@ -7,6 +7,7 @@ set -e
 export DATABASE_URL=${DATABASE_URL:-"file:/data/guhdeats.db"}
 export NODE_ENV=${NODE_ENV:-"production"}
 export PORT=${PORT:-"3000"}
+export HEALTH_PORT=${HEALTH_PORT:-"3001"}
 
 echo "🚀 Starting Railway-optimized Roulette System..."
 echo "📦 Environment: $NODE_ENV"
@@ -50,7 +51,7 @@ if [ -f "/health-check.js" ]; then
   # Wait for health check to be ready
   echo "⏳ Waiting for health check server..."
   for i in $(seq 1 30); do
-    if curl -f -s http://localhost:${PORT}/health >/dev/null 2>&1; then
+    if curl -f -s http://localhost:${HEALTH_PORT}/health >/dev/null 2>&1; then
       echo "✅ Health check server is ready"
       break
     fi
@@ -103,7 +104,7 @@ console.log('🎯 All critical dependencies validated');
 # Start the bot with Railway optimizations
 echo "🎮 Starting Roulette System..."
 echo "📝 Logs will be available in Railway dashboard"
-echo "🏥 Health check: http://localhost:${PORT}/health"
+echo "🏥 Health check: http://localhost:${HEALTH_PORT}/health"
 echo "⏰ Starting at $(date)"
 
 # Start the main application
