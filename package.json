@@ -9,14 +9,26 @@
     "build": "tsc -p tsconfig.json && node scripts/generate-runtime-entry.mjs",
     "prebuild": "node scripts/prebuild-validate.cjs",
     "preflight": "node scripts/validate-roulette-deps.js",
+    "preflight:railway": "node scripts/system-requirements.js",
     "start": "node dist/src/index.js",
+    "start:health": "node /health-check.js & node dist/src/index.js",
     "postinstall": "node -e \"try{require('better-sqlite3');}catch(e){process.exit(0)}\" || npm rebuild better-sqlite3",
     "test": "vitest run --config vitest.config.js",
     "test:watch": "vitest --config vitest.config.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "deploy:railway": "bash scripts/deploy-railway.sh",
+    "health:check": "node scripts/health-check.js",
+    "system:validate": "node scripts/system-requirements.js",
+    "railway:setup": "railway link && railway up",
+    "railway:logs": "railway logs",
+    "railway:status": "railway status",
+    "rebuild:all": "npm rebuild --build-from-source canvas && npm rebuild sharp && npm rebuild gifencoder",
+    "install:deps": "npm install --save canvas gifencoder sharp",
+    "validate:full": "npm run prebuild && npm run build",
+    "verify:native": "node scripts/prebuild-validate.cjs --verify-only"
   },
   "keywords": [
     "discord",
@@ -32,8 +44,8 @@
     "canvas": "^2.11.2",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
-    "gif-encoder-2": "^1.0.5",
     "gifencoder": "^2.0.1",
+    "sharp": "^0.33.2",
     "tslib": "^2.6.2"
   },
   "devDependencies": {

@@ -69,8 +69,10 @@ export function formatCard(card) {
  * Format hand for display
  */
 export function formatHand(hand, hideFirst = false) {
-  if (hideFirst) {
-    return `🃏 ${hand.slice(1).map(formatCard).join(' ')}`;
+  if (hideFirst && hand.length > 1) {
+    const [dealerUpCard, ...remainingCards] = hand;
+    const hiddenAndVisible = remainingCards.map((card, index) => (index === 0 ? '🃏' : formatCard(card)));
+    return [formatCard(dealerUpCard), ...hiddenAndVisible].join(' ').trim();
   }
   return hand.map(formatCard).join(' ');
 }

@@ -1,6 +1,77 @@
-import { PrismaClient } from '@prisma/client';
+import { logger } from '../logger.js';
 
-const prisma = new PrismaClient();
+let PrismaClientConstructor = null;
+let prismaInitializationError = null;
+
+try {
+  const pkg = await import('@prisma/client');
+  PrismaClientConstructor = pkg?.PrismaClient ?? pkg?.default?.PrismaClient ?? null;
+
+  if (!PrismaClientConstructor) {
+    throw new Error('PrismaClient export is missing from @prisma/client.');
+  }
+} catch (error) {
+  prismaInitializationError = error;
+  logger.warn('Prisma client unavailable; database features are disabled until the client is generated.', { err: error });
+}
+
+function createUnavailableError(method) {
+  const baseMessage =
+    'Prisma client is unavailable. Run `npx prisma generate` to create the client before starting the bot.';
+  const details = prismaInitializationError ? ` Original error: ${prismaInitializationError.message}` : '';
+  const error = new Error(`${baseMessage}${details}`);
+  error.code = 'PRISMA_UNAVAILABLE';
+  if (method) {
+    error.meta = { method };
+  }
+  return error;
+}
+
+function createUnavailableModelProxy() {
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (prop === 'then') {
+          return undefined;
+        }
+        return async () => {
+          throw createUnavailableError(String(prop));
+        };
+      },
+    },
+  );
+}
+
+function createPrismaFallback() {
+  const modelProxy = createUnavailableModelProxy();
+  return new Proxy(
+    {
+      $disconnect: async () => {},
+      $connect: async () => {
+        throw createUnavailableError('$connect');
+      },
+      $transaction: async () => {
+        throw createUnavailableError('$transaction');
+      },
+    },
+    {
+      get(target, prop) {
+        if (prop in target) {
+          return target[prop];
+        }
+        return modelProxy;
+      },
+    },
+  );
+}
+
+const prisma = PrismaClientConstructor ? new PrismaClientConstructor() : createPrismaFallback();
+
+export const prismaStatus = {
+  available: Boolean(PrismaClientConstructor),
+  error: prismaInitializationError,
+};
 
 export default prisma;
 

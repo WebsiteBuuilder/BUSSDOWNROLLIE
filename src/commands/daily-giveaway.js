@@ -1,5 +1,9 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
-import { getGiveawayService, getGiveawayScheduler } from '../giveaway/router.js';
+import {
+  getGiveawayService,
+  getGiveawayScheduler,
+  ensureGiveawayRuntimeAvailable,
+} from '../giveaway/runtime.js';
 import { getDailyModifiers, addDailyModifier } from '../giveaway/db.js';
 import { buildDailyEmbed } from '../giveaway/ui.js';
 
@@ -111,6 +115,11 @@ export async function execute(interaction) {
   }
 
   if (subcommand === 'start') {
+    const available = await ensureGiveawayRuntimeAvailable(interaction);
+    if (!available) {
+      return;
+    }
+
     const service = getGiveawayService();
     const scheduler = getGiveawayScheduler();
 

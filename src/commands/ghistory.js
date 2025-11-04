@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { getGiveawayService } from '../giveaway/router.js';
+import { getGiveawayService, ensureGiveawayRuntimeAvailable } from '../giveaway/runtime.js';
 
 export const data = new SlashCommandBuilder()
   .setName('ghistory')
@@ -12,6 +12,11 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction) {
+  const available = await ensureGiveawayRuntimeAvailable(interaction);
+  if (!available) {
+    return;
+  }
+
   const service = getGiveawayService();
   const page = interaction.options.getInteger('page') || 1;
 
