@@ -61,10 +61,15 @@ COPY src ./src
 RUN npm run build || (echo "⚠️ Build failed once, retrying..." && npm run build) || (echo "❌ TypeScript build failed after retry!" && exit 1)
 
 # Verify build output exists and is valid (self-healing verification)
-RUN test -f dist/src/index.js || (echo "❌ Build output missing!" && exit 1) && \
+RUN echo "🔍 Verifying build output..." && \
+    ls -la dist/ 2>/dev/null || echo "⚠️ dist/ directory listing failed" && \
+    ls -la dist/src/ 2>/dev/null || echo "⚠️ dist/src/ directory listing failed" && \
+    test -f dist/src/index.js || (echo "❌ Build output missing at dist/src/index.js!" && ls -la dist/ 2>/dev/null && exit 1) && \
     node -e "console.log('✅ TypeScript build passed all checks!')" && \
     node --check dist/src/index.js || (echo "❌ Build output syntax error!" && exit 1) && \
-    echo "✅ Build verification complete - ready for Railway deployment"
+    echo "✅ Build verification complete - ready for Railway deployment" && \
+    echo "📦 Build output structure:" && \
+    find dist/src -type f -name "*.js" | head -20
 
 ########## Runtime stage ##########
 FROM node:20-bookworm-slim AS runner

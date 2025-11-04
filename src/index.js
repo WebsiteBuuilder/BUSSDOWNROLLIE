@@ -177,44 +177,46 @@ client.commands = new Collection();
  */
 async function loadCommands() {
   const commandsPath = join(__dirname, 'commands');
-  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js') || file.endsWith('.ts'));
+  
+  if (!existsSync(commandsPath)) {
+    logger.error('Commands directory not found', { path: commandsPath });
+    console.error(`❌ Commands directory not found at: ${commandsPath}`);
+    return;
+  }
+  
+  const commandFiles = readdirSync(commandsPath).filter((file) => file.endsWith('.js'));
+  
+  console.log(`📦 Found ${commandFiles.length} command file(s) in ${commandsPath}`);
+  
+  let loadedCount = 0;
+  let skippedCount = 0;
 
   for (const file of commandFiles) {
     const filePath = join(commandsPath, file);
     let command;
 
     try {
-      if (file.endsWith('.js')) {
-        command = await import(pathToFileURL(filePath).href);
-      } else if (file.endsWith('.ts')) {
-        const built = await ensureTypescriptBuild(join('commands', file.replace(/\.ts$/, '.js')));
-        if (!built) {
-          logger.warn('Skipping TypeScript command due to build failure', { file });
-          continue;
-        }
-
-        const compiledPath = join(distSrcDir, 'commands', file.replace(/\.ts$/, '.js'));
-        if (!existsSync(compiledPath)) {
-          logger.warn('Compiled command not found after build', { file, compiledPath });
-          continue;
-        }
-
-        command = await import(pathToFileURL(compiledPath).href);
-      } else {
-        logger.warn('Skipping unsupported command file', { file });
-        continue;
-      }
+      command = await import(pathToFileURL(filePath).href);
     } catch (error) {
       logger.error('failed to load command module', { file, err: error });
+      skippedCount++;
       continue;
     }
 
     if ('data' in command && 'execute' in command) {
       client.commands.set(command.data.name, command);
       console.log(`✅ Loaded command: ${command.data.name}`);
+      loadedCount++;
     } else {
       console.warn(`⚠️  Command at ${file} is missing required "data" or "execute" property`);
+      skippedCount++;
     }
+  }
+  
+  console.log(`📊 Command loading complete: ${loadedCount} loaded, ${skippedCount} skipped`);
+  
+  if (loadedCount === 0) {
+    console.warn('⚠️  WARNING: No commands were loaded! Bot will not respond to slash commands.');
   }
 }
 
@@ -249,23 +251,31 @@ async function registerCommands() {
     commands.push(command.data.toJSON());
   }
 
+  if (commands.length === 0) {
+    console.warn('⚠️  WARNING: No commands to register! Check command loading.');
+    logger.warn('No commands available for registration');
+    return;
+  }
+
+  console.log(`🔄 Registering ${commands.length} slash command(s) with Discord...`);
+  console.log(`📋 Commands: ${commands.map(c => c.name).join(', ')}`);
+
   const rest = new REST().setToken(botConfig.token);
 
   try {
-    console.log(`🔄 Registering ${commands.length} slash commands...`);
-
     // Guild-specific registration (faster for development)
     if (botConfig.guildId) {
       await rest.put(Routes.applicationGuildCommands(client.user.id, botConfig.guildId), {
         body: commands,
       });
-      console.log('✅ Successfully registered guild commands');
+      console.log(`✅ Successfully registered ${commands.length} guild command(s) to guild ${botConfig.guildId}`);
     } else {
       // Global registration (takes up to 1 hour to propagate)
       await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
-      console.log('✅ Successfully registered global commands');
+      console.log(`✅ Successfully registered ${commands.length} global command(s)`);
     }
   } catch (error) {
+    console.error('❌ Failed to register commands with Discord:', error.message);
     logger.error('error registering commands', { err: error });
   }
 }

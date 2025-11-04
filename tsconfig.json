@@ -9,10 +9,11 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowJs": true,
-    "outDir": "dist",
+    "outDir": "./dist",
+    "rootDir": "./src",
     "typeRoots": ["./node_modules/@types", ".", "src/types"],
     "types": [],
-    "baseUrl": "src",
+    "baseUrl": "./src",
     "noImplicitAny": false,
     "strictNullChecks": false,
     "strictFunctionTypes": false,
@@ -21,6 +22,6 @@
     "noImplicitThis": false,
     "alwaysStrict": false
   },
-  "include": ["src/**/*", "scripts/**/*", "types.d.ts", "src/types/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*", "types.d.ts", "src/types/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts"]
 }

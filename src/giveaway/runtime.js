@@ -80,38 +80,39 @@ async function tryLoadModule(modulePath) {
 }
 
 async function loadGiveawayRuntime() {
+  // Try to load compiled JS file first (production build)
   const distRouterPath = join(distSrcDir, 'giveaway', 'router.js');
 
   if (existsSync(distRouterPath)) {
     const module = await tryLoadModule(distRouterPath);
     if (module) {
+      logger.info('Giveaway router loaded from compiled build', { source: distRouterPath });
       return { module, available: true, source: distRouterPath, reason: null };
     }
   }
 
+  // Try to build from TypeScript source if available (development/runtime build)
   const tsSource = join(__dirname, 'router.ts');
-  if (!existsSync(tsSource)) {
-    const reason = 'Giveaway router TypeScript source is missing.';
-    logger.warn(reason, { source: tsSource });
-    return { module: createUnavailableModule(reason), available: false, source: null, reason };
-  }
-
-  const built = await ensureTypescriptBuild('giveaway/router.js');
-  if (!built) {
-    const reason = 'TypeScript build failed for giveaway module.';
-    return { module: createUnavailableModule(reason), available: false, source: null, reason };
-  }
-
-  if (existsSync(distRouterPath)) {
-    const module = await tryLoadModule(distRouterPath);
-    if (module) {
-      return { module, available: true, source: distRouterPath, reason: null };
+  if (existsSync(tsSource)) {
+    logger.info('Attempting to build giveaway router from TypeScript source', { source: tsSource });
+    const built = await ensureTypescriptBuild('giveaway/router.js');
+    if (built && existsSync(distRouterPath)) {
+      const module = await tryLoadModule(distRouterPath);
+      if (module) {
+        logger.info('Giveaway router built and loaded successfully', { source: distRouterPath });
+        return { module, available: true, source: distRouterPath, reason: null };
+      }
     }
   }
 
-  const reason = 'Compiled giveaway router module missing after build.';
-  logger.warn(reason, { source: distRouterPath });
-  return { module: createUnavailableModule(reason), available: false, source: distRouterPath, reason };
+  // Giveaway is optional - log warning but don't fail
+  const reason = 'Giveaway router not available (optional feature). Bot will continue without giveaway functionality.';
+  logger.warn(reason, { 
+    distPath: distRouterPath,
+    tsSource: existsSync(tsSource) ? tsSource : 'not found',
+    distExists: existsSync(distSrcDir)
+  });
+  return { module: createUnavailableModule(reason), available: false, source: null, reason };
 }
 
 const runtimeState = await loadGiveawayRuntime();

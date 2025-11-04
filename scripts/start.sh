@@ -65,9 +65,19 @@ fi
 # Pre-flight validation
 echo "🛫 Running pre-flight checks..."
 if [ -f "./dist/src/index.js" ]; then
-  echo "✅ Application bundle found"
+  echo "✅ Application bundle found at ./dist/src/index.js"
+elif [ -f "/app/dist/src/index.js" ]; then
+  echo "✅ Application bundle found at /app/dist/src/index.js"
+elif [ -f "dist/index.js" ]; then
+  echo "✅ Application bundle found at dist/index.js (using alternative entry)"
+  export ALT_ENTRY=true
 else
-  echo "❌ Application bundle not found!"
+  echo "❌ Application bundle not found in expected locations!"
+  echo "   Checked: ./dist/src/index.js, /app/dist/src/index.js, dist/index.js"
+  echo "   Listing /app/dist contents:"
+  ls -la /app/dist 2>/dev/null || echo "   /app/dist does not exist"
+  echo "   Listing ./dist contents:"
+  ls -la ./dist 2>/dev/null || echo "   ./dist does not exist"
   exit 1
 fi
 
