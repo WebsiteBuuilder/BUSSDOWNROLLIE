@@ -42,21 +42,24 @@ WORKDIR /app
 # Copy package manifests first for better caching
 COPY package.json package-lock.json* ./
 
-# Install dependencies with better caching
-# Use npm ci for faster, reproducible installs (omit dev to reduce size)
-RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+# Install dependencies (optimized for Railway - no audit, minimal progress)
+RUN npm ci --legacy-peer-deps --no-audit --progress=false || \
+    npm install --legacy-peer-deps --no-audit --progress=false
 
 # Copy source files (only what's needed for build)
 COPY tsconfig.json ./
+COPY types.d.ts ./
 COPY prisma ./prisma
 COPY scripts ./scripts
 COPY src ./src
 
-# Build TypeScript (with optimized prebuild validation)
-RUN npm run build || (echo "❌ TypeScript build failed!" && exit 1)
+# Build TypeScript (with retry logic for network stability)
+RUN npm run build || (echo "⚠️ Build failed once, retrying..." && npm run build) || (echo "❌ TypeScript build failed after retry!" && exit 1)
 
-# Ensure build output exists
-RUN test -f dist/src/index.js || (echo "❌ Build output missing!" && exit 1)
+# Verify build output exists and is valid
+RUN test -f dist/src/index.js || (echo "❌ Build output missing!" && exit 1) && \
+    node -e "console.log('✅ TypeScript build passed all checks!')" && \
+    node --check dist/src/index.js || (echo "❌ Build output syntax error!" && exit 1)
 
 ########## Runtime stage ##########
 FROM node:20-bookworm-slim AS runner

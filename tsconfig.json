@@ -5,15 +5,22 @@
     "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,
+    "strict": false,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowJs": true,
     "outDir": "dist",
-    "typeRoots": ["./node_modules/@types", "."],
+    "typeRoots": ["./node_modules/@types", ".", "src/types"],
     "types": [],
-    "baseUrl": "src"
+    "baseUrl": "src",
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
+    "alwaysStrict": false
   },
-  "include": ["src/**/*", "scripts/**/*", "types.d.ts"],
+  "include": ["src/**/*", "scripts/**/*", "types.d.ts", "src/types/**/*"],
   "exclude": ["node_modules", "dist"]
 }

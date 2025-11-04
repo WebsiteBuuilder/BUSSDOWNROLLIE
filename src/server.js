@@ -22,6 +22,9 @@ function buildHealthResponse(startedAt) {
     status: 'ok',
     uptime: process.uptime(),
     startedAt,
+    timestamp: new Date().toISOString(),
+    service: 'guhd-eats-bot',
+    version: '1.0.0'
   });
 }
 
