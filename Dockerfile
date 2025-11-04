@@ -9,8 +9,8 @@ ENV NODE_ENV=development \
     npm_config_loglevel=error \
     npm_config_cache=/tmp/.npm
 
-# Install build prerequisites and native deps for canvas/gifencoder/sharp
-# Combined into single RUN for better caching
+# Install build prerequisites and native deps for canvas/gifencoder/sharp/better-sqlite3
+# Combined into single RUN for better caching and minimal layer size
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
@@ -30,7 +30,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     librsvg2-dev \
     libfreetype6-dev \
     fonts-dejavu-core \
+    sqlite3 \
+    libsqlite3-dev \
   && rm -rf /var/lib/apt/lists/* \
+  && apt-get clean \
   && ln -sf /usr/bin/python3 /usr/bin/python
 
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig \
@@ -42,9 +45,10 @@ WORKDIR /app
 # Copy package manifests first for better caching
 COPY package.json package-lock.json* ./
 
-# Install dependencies (optimized for Railway - no audit, minimal progress)
+# Install dependencies (optimized for Railway - strict lockfile, no audit, minimal progress)
 RUN npm ci --legacy-peer-deps --no-audit --progress=false || \
-    npm install --legacy-peer-deps --no-audit --progress=false
+    (echo "⚠️ npm ci failed, falling back to npm install..." && \
+     npm install --legacy-peer-deps --no-audit --progress=false)
 
 # Copy source files (only what's needed for build)
 COPY tsconfig.json ./
@@ -56,10 +60,11 @@ COPY src ./src
 # Build TypeScript (with retry logic for network stability)
 RUN npm run build || (echo "⚠️ Build failed once, retrying..." && npm run build) || (echo "❌ TypeScript build failed after retry!" && exit 1)
 
-# Verify build output exists and is valid
+# Verify build output exists and is valid (self-healing verification)
 RUN test -f dist/src/index.js || (echo "❌ Build output missing!" && exit 1) && \
     node -e "console.log('✅ TypeScript build passed all checks!')" && \
-    node --check dist/src/index.js || (echo "❌ Build output syntax error!" && exit 1)
+    node --check dist/src/index.js || (echo "❌ Build output syntax error!" && exit 1) && \
+    echo "✅ Build verification complete - ready for Railway deployment"
 
 ########## Runtime stage ##########
 FROM node:20-bookworm-slim AS runner
