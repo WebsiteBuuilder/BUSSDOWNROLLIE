@@ -242,17 +242,17 @@ export function createResultEmbed({
       inline: false
     },
     {
-      name: '💰 **Financial Summary**',
+      name: '💰 **Financial Breakdown**',
       value: 
-        `**Total Bet:** ${formatVP(totalBet)} VP\n` +
-        `**Total Won:** ${formatVP(totalWon)} VP\n` +
-        `**Net ${didWin ? 'Profit' : 'Loss'}:** ${didWin ? '+' : ''}${formatVP(net)} VP`,
+        `**Bet:** ${formatVP(totalBet)} VP\n` +
+        `**Payout:** ${formatVP(totalWon)} VP\n` +
+        `**Net:** ${didWin ? '+' : ''}${formatVP(net)} VP`,
       inline: true
     },
     {
       name: '🏦 **Balance**',
       value: newBalance !== null 
-        ? `**New Balance:** ${formatVP(newBalance)} VP\n**Status:** ${didWin ? '✅ Winner!' : '❌ Loss'}` 
+        ? `**Balance:** ${formatVP(newBalance)} VP\n**Status:** ${didWin ? '✅ Winner!' : '❌ Loss'}` 
         : `**Status:** ${didWin ? '✅ Winner!' : '❌ Loss'}`,
       inline: true
     },

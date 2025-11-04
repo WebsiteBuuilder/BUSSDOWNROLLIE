@@ -536,12 +536,7 @@ export async function validateCinematicAnimation() {
 }
 
 /**
- * Get animation status
+ * Get animation status (removed - use safe-animation.js instead)
+ * This function is not used - getAnimationStatus is exported from safe-animation.js
  */
-export function getAnimationStatus() {
-  return {
-    available: true,
-    mode: 'CINEMATIC_V2_NEUQUANT'
-  };
-}
 

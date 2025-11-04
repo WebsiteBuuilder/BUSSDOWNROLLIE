@@ -268,7 +268,7 @@ async function spinWheel(interaction, state, commandId) {
   const primaryBetType = Object.keys(state.bets)[0];
   let betDescriptor = {};
   
-  if (['red', 'black', 'green'].includes(primaryBetType)) {
+  if (primaryBetType && ['red', 'black', 'green'].includes(primaryBetType)) {
     betDescriptor = { color: primaryBetType };
   }
 
@@ -278,6 +278,12 @@ async function spinWheel(interaction, state, commandId) {
     betDescriptor: betDescriptor,
     userProfile: { vipPoints: state.vipScore ?? 0 },
   });
+
+  // Validate pocket result
+  if (!pocket || typeof pocket.number !== 'number' || typeof pocket.color !== 'string') {
+    console.error('❌ Invalid pocket result from getRoulettePocket:', pocket);
+    throw new Error('Failed to determine winning number');
+  }
 
   console.log(`🎯 Winning number: ${pocket.number} (${pocket.color})`);
 
@@ -297,10 +303,11 @@ async function spinWheel(interaction, state, commandId) {
         });
 
     const gifBuffer = result.buffer;
-    animationMetadata = result.metadata;
+    animationMetadata = result.metadata || null;
 
     const genTime = ((Date.now() - startGen) / 1000).toFixed(2);
-    console.log(`⚡ Generation complete in ${genTime}s - Size: ${animationMetadata.sizeMB}MB`);
+    const sizeMB = animationMetadata?.sizeMB || 'N/A';
+    console.log(`⚡ Generation complete in ${genTime}s - Size: ${sizeMB}MB`);
 
     const attachment = new AttachmentBuilder(gifBuffer, {
       name: 'roulette-spin.gif',
@@ -314,10 +321,14 @@ async function spinWheel(interaction, state, commandId) {
     });
 
     // Wait for animation to play (8.5 seconds)
-    const playDuration = animationMetadata.duration || 8500;
+    const playDuration = animationMetadata?.duration || 8500;
     await new Promise(resolve => setTimeout(resolve, playDuration));
 
-    console.log(`✅ Cinematic animation completed | ${animationMetadata.frames} frames | ${animationMetadata.sizeMB}MB | ${animationMetadata.encodeTimeSeconds}s`);
+    if (animationMetadata) {
+      console.log(`✅ Cinematic animation completed | ${animationMetadata.frames || 'N/A'} frames | ${animationMetadata.sizeMB || 'N/A'}MB | ${animationMetadata.encodeTimeSeconds || 'N/A'}s`);
+    } else {
+      console.log('✅ Cinematic animation completed');
+    }
     animationSuccess = true;
     
   } catch (cinematicError) {
@@ -391,12 +402,18 @@ async function spinWheel(interaction, state, commandId) {
   let didWin = false;
 
   for (const [betType, betAmount] of Object.entries(state.bets)) {
+    if (!betType || typeof betAmount !== 'number' || betAmount <= 0) {
+      console.warn(`⚠️ Invalid bet entry: ${betType} = ${betAmount}`);
+      continue;
+    }
+    
     const won = checkBetWin(betType, pocket.number, pocket.color);
     if (won) {
       const multiplier = PAYOUTS[betType] || 2;
-      totalWinnings += betAmount * multiplier;
+      const winnings = betAmount * multiplier;
+      totalWinnings += winnings;
       didWin = true;
-      console.log(`✅ Bet ${betType} won! Payout: ${betAmount} × ${multiplier} = ${betAmount * multiplier} VP`);
+      console.log(`✅ Bet ${betType} won! Payout: ${betAmount} × ${multiplier} = ${winnings} VP`);
     }
   }
 
@@ -412,18 +429,21 @@ async function spinWheel(interaction, state, commandId) {
   // Fetch updated balance
   const updatedUser = await getOrCreateUser(state.userId);
 
+  // Ensure updatedUser exists and has vp property
+  const finalBalance = updatedUser?.vp ?? 0;
+  
   const resultEmbed = createResultEmbed({
-    displayName: state.displayName,
+    displayName: state.displayName || 'Unknown Player',
     winningNumber: pocket.number,
     winningColor: pocket.color,
     frame: `🎯 **${pocket.number}** ${getNumberColor(pocket.number) === 'red' ? '🔴' : getNumberColor(pocket.number) === 'black' ? '⚫' : '🟢'}`,
     didWin,
     net,
-    bets: state.bets,
-    houseEdge: houseEdgeConfig.roulette.baseEdge,
+    bets: state.bets || {},
+    houseEdge: houseEdgeConfig?.roulette?.baseEdge ?? 0,
     totalWon: totalWinnings,
     totalBet: state.totalBet,
-    newBalance: updatedUser.vp
+    newBalance: finalBalance
   });
 
   await spinMessage.edit({ 
