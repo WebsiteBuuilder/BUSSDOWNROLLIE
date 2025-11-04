@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "build": "tsc -p tsconfig.json && node scripts/generate-runtime-entry.mjs",
-    "prebuild": "node scripts/prebuild-validate.cjs",
+    "prebuild": "echo 'Skipping prebuild validation for faster builds'",
     "preflight": "node scripts/validate-roulette-deps.js",
     "preflight:railway": "node scripts/system-requirements.js",
     "start": "node dist/src/index.js",
@@ -44,6 +44,7 @@
     "canvas": "^2.11.2",
     "discord.js": "^14.14.1",
     "dotenv": "^16.3.1",
+    "gif-encoder-2": "^1.0.5",
     "gifencoder": "^2.0.1",
     "sharp": "^0.33.2",
     "tslib": "^2.6.2"

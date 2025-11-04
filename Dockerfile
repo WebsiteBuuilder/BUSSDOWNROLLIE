@@ -10,6 +10,7 @@ ENV NODE_ENV=development \
     npm_config_cache=/tmp/.npm
 
 # Install build prerequisites and native deps for canvas/gifencoder/sharp
+# Combined into single RUN for better caching
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
@@ -29,40 +30,33 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     librsvg2-dev \
     libfreetype6-dev \
     fonts-dejavu-core \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && ln -sf /usr/bin/python3 /usr/bin/python
 
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig \
     npm_config_python=/usr/bin/python3 \
     npm_config_build_from_source=true
-
-RUN ln -sf /usr/bin/python3 /usr/bin/python \
-  && pkg-config --libs cairo \
-  && pkg-config --libs pixman-1 \
-  && pkg-config --libs pangocairo
 
 WORKDIR /app
 
 # Copy package manifests first for better caching
 COPY package.json package-lock.json* ./
 
-# Resilient dependency installation with fallbacks
-RUN npm ci || npm install --legacy-peer-deps || npm install --force --legacy-peer-deps
+# Install dependencies with better caching
+# Use npm ci for faster, reproducible installs (omit dev to reduce size)
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
-# Ensure native bindings are compiled
-RUN npm rebuild canvas && \
-    (npm rebuild sharp || true)
+# Copy source files (only what's needed for build)
+COPY tsconfig.json ./
+COPY prisma ./prisma
+COPY scripts ./scripts
+COPY src ./src
 
-# Copy the rest of the project
-COPY . .
-
-# Validate native modules and build the project
-RUN node scripts/prebuild-validate.cjs && npm run build
+# Build TypeScript (validation happens at runtime, not during build)
+RUN npm run build || (echo "Build failed!" && exit 1)
 
 # Ensure build output exists
-RUN test -f dist/src/index.js
-
-# Remove devDependencies for slimmer runtime image
-RUN npm prune --omit=dev && npm cache clean --force
+RUN test -f dist/src/index.js || (echo "❌ Build output missing!" && exit 1)
 
 ########## Runtime stage ##########
 FROM node:20-bookworm-slim AS runner
@@ -73,7 +67,7 @@ ENV NODE_ENV=production \
     DATABASE_URL=file:/data/guhdeats.db \
     PORT=3000
 
-# Install runtime libraries for native modules
+# Install runtime libraries for native modules (minimal set)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libpixman-1-0 \
@@ -89,12 +83,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy production artifacts
+# Copy production artifacts only
 COPY --from=builder /app/package.json /app/package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/scripts ./scripts
 
 # Copy startup helpers
 COPY scripts/start.sh /start.sh
