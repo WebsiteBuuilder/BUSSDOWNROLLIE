@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "build": "tsc -p tsconfig.json && node scripts/generate-runtime-entry.mjs",
-    "prebuild": "echo 'Skipping prebuild validation for faster builds'",
+    "prebuild": "node scripts/prebuild-validate.cjs --verify-only || echo '⚠️ Prebuild validation warning (non-fatal)'",
     "preflight": "node scripts/validate-roulette-deps.js",
     "preflight:railway": "node scripts/system-requirements.js",
     "start": "node dist/src/index.js",

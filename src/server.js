@@ -132,6 +132,8 @@ export async function startNetworkServer(options = {}) {
       const actualPort = typeof address === 'object' && address ? address.port : preferredPort;
       const duration = Date.now() - attemptStart;
 
+      console.log(`✅ Health server listening on ${host}:${actualPort}`);
+      console.log(`✅ Health check available at: http://${host}:${actualPort}/health`);
       logger.info(`Server running on port ${actualPort}`, { durationMs: duration });
       logger.info('network health server ready', {
         attempt,

@@ -10,6 +10,7 @@
     "resolveJsonModule": true,
     "allowJs": true,
     "outDir": "dist",
+    "typeRoots": ["./node_modules/@types", "."],
     "types": [],
     "baseUrl": "src"
   },

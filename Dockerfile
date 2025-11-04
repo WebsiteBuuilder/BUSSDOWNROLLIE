@@ -52,8 +52,8 @@ COPY prisma ./prisma
 COPY scripts ./scripts
 COPY src ./src
 
-# Build TypeScript (validation happens at runtime, not during build)
-RUN npm run build || (echo "Build failed!" && exit 1)
+# Build TypeScript (with optimized prebuild validation)
+RUN npm run build || (echo "❌ TypeScript build failed!" && exit 1)
 
 # Ensure build output exists
 RUN test -f dist/src/index.js || (echo "❌ Build output missing!" && exit 1)
