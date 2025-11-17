@@ -1,8 +1,9 @@
 // [AI FIX]: Comprehensive Prisma environment + DATABASE_URL validation BEFORE any imports
 // Prisma reads configuration at import-time, so everything must be prepared up-front.
 // Import Node.js built-ins (safe before Prisma/logger).
-import { existsSync, mkdirSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { dirname, resolve, join } from 'path';
+import { spawnSync } from 'child_process';
 
 /**
  * Force Prisma to use local binary engines instead of the Data Proxy.
@@ -12,6 +13,8 @@ import { dirname, resolve } from 'path';
  * the client reads these env vars at import time. If the client was generated
  * with Data Proxy enabled, we need to ensure runtime doesn't try to use it.
  */
+const projectRoot = process.cwd();
+
 function enforcePrismaBinaryEngines() {
   const overrides = {
     PRISMA_CLIENT_ENGINE_TYPE: 'binary',
@@ -40,6 +43,63 @@ function enforcePrismaBinaryEngines() {
 }
 
 enforcePrismaBinaryEngines();
+
+/**
+ * Ensure the generated Prisma client inside node_modules targets binary engines.
+ * If Cursor or any deployment step accidentally generated a Data Proxy client,
+ * this will transparently re-run our prisma-generate script before Prisma loads.
+ */
+function ensureBinaryPrismaClientArtifacts() {
+  const clientIndexPath = join(projectRoot, 'node_modules', '@prisma', 'client', 'index.js');
+  const prismaGenerateScript = join(projectRoot, 'scripts', 'prisma-generate.cjs');
+
+  function regeneratePrismaClient(reason) {
+    console.warn(`[DB] ${reason}`);
+    const result = spawnSync('node', [prismaGenerateScript], {
+      cwd: projectRoot,
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        PRISMA_CLIENT_ENGINE_TYPE: 'binary',
+        PRISMA_GENERATE_DATAPROXY: 'false',
+        PRISMA_QUERY_ENGINE_TYPE: 'binary',
+        PRISMA_CLI_QUERY_ENGINE_TYPE: 'binary',
+      },
+    });
+
+    if (result.status !== 0) {
+      throw new Error(`Automatic Prisma client regeneration failed (exit code ${result.status ?? 'unknown'})`);
+    }
+  }
+
+  if (!existsSync(clientIndexPath)) {
+    regeneratePrismaClient('Prisma client artifacts missing; regenerating before startup...');
+  } else {
+    try {
+      const clientCode = readFileSync(clientIndexPath, 'utf8');
+      const looksDataProxy = /dataproxy/i.test(clientCode) || clientCode.includes('prisma://');
+
+      if (looksDataProxy) {
+        regeneratePrismaClient('Detected Prisma Data Proxy client artifacts; forcing binary regeneration...');
+      }
+    } catch (error) {
+      console.warn('[DB] Failed to inspect Prisma client artifacts; attempting regeneration as safety measure.', error);
+      regeneratePrismaClient('Could not verify Prisma client mode; regenerating to ensure binary engines...');
+    }
+  }
+
+  // Final verification: if the index is still missing or still references Data Proxy, fail fast
+  if (!existsSync(clientIndexPath)) {
+    throw new Error('Prisma client index missing after regeneration. Cannot continue.');
+  }
+
+  const finalClientCode = readFileSync(clientIndexPath, 'utf8');
+  if (/dataproxy/i.test(finalClientCode) || finalClientCode.includes('prisma://')) {
+    throw new Error('Prisma client is still targeting Data Proxy after regeneration. Check prisma schema and scripts.');
+  }
+}
+
+ensureBinaryPrismaClientArtifacts();
 
 /**
  * Validates and normalizes DATABASE_URL for SQLite
