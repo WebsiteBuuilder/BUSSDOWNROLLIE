@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "allowJs": true,
-    "outDir": "./dist",
+    "noEmit": false, // [AI FIX]: Explicitly ensure TypeScript emits compiled files
+    "outDir": "./dist/src", // [AI FIX]: Output directory matches package.json#main (dist/src/index.js)
     "rootDir": "./src",
     "typeRoots": ["./node_modules/@types", ".", "src/types"],
     "types": [],
