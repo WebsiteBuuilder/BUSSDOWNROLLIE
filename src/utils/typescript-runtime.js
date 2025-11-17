@@ -8,7 +8,18 @@ import { logger } from '../logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export const repoRoot = join(__dirname, '..', '..');
+// [AI FIX]: Detect project root by checking for package.json to avoid double dist/dist path
+// When running from dist/src/utils/typescript-runtime.js, __dirname is dist/src/utils
+// Going up two levels gives 'dist', so we need to go up one more to get project root
+let computedRepoRoot = join(__dirname, '..', '..');
+// Check if package.json exists at this level, if not, we're in dist directory
+const packageJsonPath = join(computedRepoRoot, 'package.json');
+if (!existsSync(packageJsonPath)) {
+  // We're likely in dist directory, go up one more level to get project root
+  computedRepoRoot = join(__dirname, '..', '..', '..');
+}
+
+export const repoRoot = computedRepoRoot;
 export const srcRoot = join(repoRoot, 'src');
 export const distSrcDir = join(repoRoot, 'dist', 'src');
 

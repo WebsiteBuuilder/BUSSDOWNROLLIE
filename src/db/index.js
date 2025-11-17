@@ -1,5 +1,26 @@
 import { logger } from '../logger.js';
 
+// [AI FIX]: Ensure DATABASE_URL is set correctly for SQLite before Prisma client initialization
+// Prisma SQLite requires DATABASE_URL to start with 'file:' protocol
+if (!process.env.DATABASE_URL) {
+  // Default to SQLite database in project root for development, or /data for production
+  const defaultDbPath = process.env.NODE_ENV === 'production' 
+    ? 'file:/data/guhdeats.db' 
+    : 'file:./prisma/dev.db';
+  process.env.DATABASE_URL = defaultDbPath;
+  logger.info('DATABASE_URL not set, using default SQLite database', { url: defaultDbPath });
+} else if (!process.env.DATABASE_URL.startsWith('file:') && !process.env.DATABASE_URL.startsWith('prisma://')) {
+  // If DATABASE_URL is set but doesn't start with file: or prisma://, assume it's a file path
+  const dbPath = process.env.DATABASE_URL.startsWith('/') 
+    ? `file:${process.env.DATABASE_URL}` 
+    : `file:./${process.env.DATABASE_URL}`;
+  logger.warn('DATABASE_URL missing file: protocol, auto-correcting', { 
+    original: process.env.DATABASE_URL, 
+    corrected: dbPath 
+  });
+  process.env.DATABASE_URL = dbPath;
+}
+
 let PrismaClientConstructor = null;
 let prismaInitializationError = null;
 
