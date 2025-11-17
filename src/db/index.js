@@ -1,25 +1,29 @@
-import { logger } from '../logger.js';
-
-// [AI FIX]: Ensure DATABASE_URL is set correctly for SQLite before Prisma client initialization
+// [AI FIX]: Ensure DATABASE_URL is set correctly for SQLite BEFORE any imports
+// This must happen before importing logger or Prisma client, as Prisma reads DATABASE_URL at instantiation
 // Prisma SQLite requires DATABASE_URL to start with 'file:' protocol
-if (!process.env.DATABASE_URL) {
+const originalDbUrl = process.env.DATABASE_URL;
+if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim() === '') {
   // Default to SQLite database in project root for development, or /data for production
   const defaultDbPath = process.env.NODE_ENV === 'production' 
     ? 'file:/data/guhdeats.db' 
     : 'file:./prisma/dev.db';
   process.env.DATABASE_URL = defaultDbPath;
-  logger.info('DATABASE_URL not set, using default SQLite database', { url: defaultDbPath });
+  console.log(`[DB] DATABASE_URL not set or empty, using default SQLite database: ${defaultDbPath}`);
 } else if (!process.env.DATABASE_URL.startsWith('file:') && !process.env.DATABASE_URL.startsWith('prisma://')) {
   // If DATABASE_URL is set but doesn't start with file: or prisma://, assume it's a file path
+  const originalUrl = process.env.DATABASE_URL;
   const dbPath = process.env.DATABASE_URL.startsWith('/') 
     ? `file:${process.env.DATABASE_URL}` 
     : `file:./${process.env.DATABASE_URL}`;
-  logger.warn('DATABASE_URL missing file: protocol, auto-correcting', { 
-    original: process.env.DATABASE_URL, 
-    corrected: dbPath 
-  });
   process.env.DATABASE_URL = dbPath;
+  console.log(`[DB] DATABASE_URL missing file: protocol, auto-correcting: ${originalUrl} -> ${dbPath}`);
 }
+
+// [AI FIX]: Log final DATABASE_URL for debugging (without exposing sensitive data)
+const finalDbUrl = process.env.DATABASE_URL;
+console.log(`[DB] Using DATABASE_URL: ${finalDbUrl.startsWith('file:') ? finalDbUrl : '[REDACTED]'}`);
+
+import { logger } from '../logger.js';
 
 let PrismaClientConstructor = null;
 let prismaInitializationError = null;
@@ -87,7 +91,15 @@ function createPrismaFallback() {
   );
 }
 
-const prisma = PrismaClientConstructor ? new PrismaClientConstructor() : createPrismaFallback();
+// [AI FIX]: Pass DATABASE_URL directly to PrismaClient constructor to ensure it's used correctly
+// This ensures the validated DATABASE_URL is used even if environment variable was set incorrectly
+const prisma = PrismaClientConstructor 
+  ? new PrismaClientConstructor({ 
+      datasources: { 
+        db: { url: process.env.DATABASE_URL } 
+      } 
+    }) 
+  : createPrismaFallback();
 
 export const prismaStatus = {
   available: Boolean(PrismaClientConstructor),
