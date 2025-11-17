@@ -64,7 +64,12 @@ function validateAndSetDatabaseUrl() {
   dbUrl = dbUrl.trim();
   
   // Step 3: Ensure it starts with 'file:' protocol for SQLite
-  if (!dbUrl.startsWith('file:') && !dbUrl.startsWith('prisma://')) {
+  // [CRITICAL]: Reject prisma:// URLs - they indicate Data Proxy mode which we don't use
+  if (dbUrl.startsWith('prisma://')) {
+    throw new Error(`DATABASE_URL cannot be prisma:// (Data Proxy). This project uses direct SQLite connection. Current value: ${dbUrl}`);
+  }
+  
+  if (!dbUrl.startsWith('file:')) {
     // If it's an absolute path starting with /
     if (dbUrl.startsWith('/')) {
       dbUrl = `file:${dbUrl}`;
@@ -187,18 +192,16 @@ function createPrismaFallback() {
   );
 }
 
-// [CRITICAL FIX]: Create Prisma client WITHOUT datasources override
-// If Prisma client was generated with Data Proxy enabled, passing datasources
-// with a file:// URL will cause P6001 errors. Instead, rely on DATABASE_URL
-// being set correctly in process.env (which we've already validated above).
+// [CRITICAL FIX]: Create Prisma client - simple instantiation, no overrides
+// PrismaClient reads DATABASE_URL from process.env automatically
+// We've already validated and set DATABASE_URL above, so no constructor args needed
 let prisma;
 let connectionPromise = null;
 
 try {
   if (PrismaClientConstructor) {
-    // [CRITICAL]: Do NOT pass datasources - let PrismaClient read from DATABASE_URL
-    // The validatedDbUrl is already set in process.env.DATABASE_URL above
-    // Passing datasources here can cause conflicts if client was generated for Data Proxy
+    // Simple instantiation - PrismaClient will use DATABASE_URL from process.env
+    // No datasources override, no custom config - just plain PrismaClient
     prisma = new PrismaClientConstructor();
     
     // [CRITICAL FIX]: Test connection with a simple query to verify Prisma is configured correctly

@@ -39,6 +39,32 @@ if (dbUrl && dbUrl.startsWith('prisma://')) {
   process.exit(1);
 }
 
+// [CRITICAL]: Delete existing Prisma client to force clean regeneration
+// This ensures we don't reuse a client that was generated with Data Proxy
+const { rmSync } = require('fs');
+const clientPath = path.join(projectRoot, 'node_modules', '@prisma', 'client');
+const generatedPath = path.join(projectRoot, 'node_modules', '.prisma');
+
+if (existsSync(clientPath)) {
+  console.log('🧹 Removing existing Prisma client to force clean regeneration...');
+  try {
+    rmSync(clientPath, { recursive: true, force: true });
+    console.log('✅ Removed existing Prisma client');
+  } catch (error) {
+    console.warn('⚠️  Could not remove existing Prisma client:', error.message);
+    console.warn('   Continuing anyway - prisma generate will overwrite it');
+  }
+}
+
+if (existsSync(generatedPath)) {
+  try {
+    rmSync(generatedPath, { recursive: true, force: true });
+    console.log('✅ Removed existing Prisma generated files');
+  } catch (error) {
+    console.warn('⚠️  Could not remove existing Prisma generated files:', error.message);
+  }
+}
+
 const prismaGenerate = spawn('npx', ['prisma', 'generate'], {
   stdio: 'inherit',
   shell: true,
