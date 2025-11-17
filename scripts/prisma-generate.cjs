@@ -8,7 +8,7 @@
  */
 
 const { spawn } = require('child_process');
-const { existsSync, readFileSync } = require('fs');
+const { existsSync, readFileSync, rmSync } = require('fs');
 const path = require('path');
 
 // [CRITICAL]: Set environment variables to force binary engine mode BEFORE generation
@@ -39,20 +39,42 @@ if (dbUrl && dbUrl.startsWith('prisma://')) {
   process.exit(1);
 }
 
-// [CRITICAL]: Delete existing Prisma client to force clean regeneration
-// This ensures we don't reuse a client that was generated with Data Proxy
-const { rmSync } = require('fs');
 const clientPath = path.join(projectRoot, 'node_modules', '@prisma', 'client');
 const generatedPath = path.join(projectRoot, 'node_modules', '.prisma');
 
-if (existsSync(clientPath)) {
-  console.log('🧹 Removing existing Prisma client to force clean regeneration...');
+const DATAPROXY_MARKERS = ['prisma://', 'dataproxy', 'DataProxy'];
+const forceClientClean = process.env.PRISMA_FORCE_CLEAN === '1';
+
+function clientLooksLikeDataProxy(clientRoot) {
+  const indexPath = path.join(clientRoot, 'index.js');
+  if (!existsSync(indexPath)) {
+    return false;
+  }
+
   try {
-    rmSync(clientPath, { recursive: true, force: true });
-    console.log('✅ Removed existing Prisma client');
+    const clientCode = readFileSync(indexPath, 'utf8');
+    return DATAPROXY_MARKERS.some((marker) => clientCode.includes(marker));
   } catch (error) {
-    console.warn('⚠️  Could not remove existing Prisma client:', error.message);
-    console.warn('   Continuing anyway - prisma generate will overwrite it');
+    console.warn('⚠️  Could not inspect existing Prisma client:', error.message);
+    console.warn('   Skipping forced removal. Set PRISMA_FORCE_CLEAN=1 to override.');
+    return false;
+  }
+}
+
+if (existsSync(clientPath)) {
+  const shouldForceClean = forceClientClean || clientLooksLikeDataProxy(clientPath);
+
+  if (shouldForceClean) {
+    console.log('🧹 Removing existing Prisma client to force clean regeneration...');
+    try {
+      rmSync(clientPath, { recursive: true, force: true });
+      console.log('✅ Removed existing Prisma client');
+    } catch (error) {
+      console.warn('⚠️  Could not remove existing Prisma client:', error.message);
+      console.warn('   Continuing anyway - prisma generate will overwrite it');
+    }
+  } else {
+    console.log('ℹ️  Existing Prisma client already targets binary engines; skipping forced reinstall.');
   }
 }
 

@@ -70,10 +70,32 @@ function purgeModule(moduleName) {
 }
 
 function ensureNodeGypCache() {
-  const cacheRoot = path.join(os.homedir(), '.cache', 'node-gyp');
-  if (!fs.existsSync(cacheRoot)) {
-    fs.mkdirSync(cacheRoot, { recursive: true });
+  const preferredCache = path.join(os.homedir() || os.tmpdir(), '.cache', 'node-gyp');
+  const fallbackCache = path.join(PROJECT_ROOT, '.cache', 'node-gyp');
+
+  const ensureWritableDirectory = (targetPath) => {
+    fs.mkdirSync(targetPath, { recursive: true });
+    fs.accessSync(targetPath, fs.constants.W_OK);
+    return targetPath;
+  };
+
+  let cacheRoot = preferredCache;
+  try {
+    cacheRoot = ensureWritableDirectory(preferredCache);
+  } catch (error) {
+    logWithEmoji(
+      '⚠️',
+      `Default node-gyp cache unavailable (${error.message}). Falling back to project-local cache.`
+    );
+    cacheRoot = ensureWritableDirectory(fallbackCache);
   }
+
+  process.env.NODE_GYP_CACHE = cacheRoot;
+  if (!process.env.npm_config_cache) {
+    process.env.npm_config_cache = path.join(PROJECT_ROOT, '.npm-cache');
+  }
+  fs.mkdirSync(process.env.npm_config_cache, { recursive: true });
+  logWithEmoji('🗂️', `Using node-gyp cache at ${cacheRoot}`);
 }
 
 function checkPkgConfig(pkg) {
