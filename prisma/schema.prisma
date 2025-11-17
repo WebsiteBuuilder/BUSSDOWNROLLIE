@@ -2,7 +2,9 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
+  engineType = "binary" // Hard-force binary engines so Prisma never targets Data Proxy
+  binaryTargets = ["native"]
 }
 
 datasource db {
