@@ -25,9 +25,16 @@ export PRISMA_GENERATE_DATAPROXY=false
 export PRISMA_QUERY_ENGINE_TYPE=binary
 export PRISMA_CLI_QUERY_ENGINE_TYPE=binary
 
-# Generate WITHOUT --no-engine flag to ensure proper binary engine generation
-if ! npx prisma generate; then
-  echo "⚠️  Prisma client generation failed, continuing..."
+PRISMA_GENERATE_SCRIPT="/app/scripts/prisma-generate.cjs"
+
+if [ -f "$PRISMA_GENERATE_SCRIPT" ]; then
+  if ! node "$PRISMA_GENERATE_SCRIPT"; then
+    echo "⚠️  Prisma client generation script failed, falling back to npx prisma generate..."
+    npx prisma generate || echo "⚠️  Prisma client generation failed, continuing..."
+  fi
+else
+  echo "⚠️  Prisma generate helper not found at $PRISMA_GENERATE_SCRIPT, using npx prisma generate..."
+  npx prisma generate || echo "⚠️  Prisma client generation failed, continuing..."
 fi
 
 # Run database migrations with timeout

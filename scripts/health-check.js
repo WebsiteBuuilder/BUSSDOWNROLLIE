@@ -12,7 +12,30 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const projectRoot = join(__dirname, '..');
+function resolveProjectRoot() {
+  const candidates = [
+    join(__dirname, '..'),
+    process.cwd(),
+    join(process.cwd(), '..'),
+    '/app',
+    '/workspace/BUSSDOWNROLLIE',
+    '/workspace',
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (existsSync(join(candidate, 'package.json'))) {
+        return candidate;
+      }
+    } catch {
+      // ignore filesystem errors and keep looking
+    }
+  }
+
+  return join(__dirname, '..');
+}
+
+const projectRoot = resolveProjectRoot();
 
 const HEALTH_PORT = process.env.HEALTH_PORT || 3001;
 const APP_PORT = process.env.PORT || 3000;
@@ -67,12 +90,18 @@ async function validateSharp() {
 }
 
 async function validateDependencies() {
+  const packageJsonPath = join(projectRoot, 'package.json');
+
+  if (!existsSync(packageJsonPath)) {
+    console.error('Dependencies validation failed: package.json not found at', packageJsonPath);
+    return false;
+  }
+
   try {
-    const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
     const requiredDeps = ['@prisma/client', 'better-sqlite3', 'canvas', 'sharp', 'discord.js'];
-    
+
     return requiredDeps.every(dep => {
-      const depName = dep.replace(/^@.*\//, ''); // Handle scoped packages
       return packageJson.dependencies && packageJson.dependencies[dep];
     });
   } catch (error) {
