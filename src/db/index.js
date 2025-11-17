@@ -1,10 +1,32 @@
-// [AI FIX]: Comprehensive DATABASE_URL validation and setup BEFORE any imports
-// This must happen before importing logger or Prisma client, as Prisma reads DATABASE_URL at instantiation
-// Prisma SQLite requires DATABASE_URL to start with 'file:' protocol
-
-// Import fs and path modules first (these are Node.js built-ins, safe to import)
+// [AI FIX]: Comprehensive Prisma environment + DATABASE_URL validation BEFORE any imports
+// Prisma reads configuration at import-time, so everything must be prepared up-front.
+// Import Node.js built-ins (safe before Prisma/logger).
 import { existsSync, mkdirSync } from 'fs';
 import { dirname, resolve } from 'path';
+
+/**
+ * Force Prisma to use local binary engines instead of the Data Proxy.
+ * Some environments (Railway) inject PRISMA_* env vars that flip it to `prisma://`.
+ */
+function enforcePrismaBinaryEngines() {
+  const overrides = {
+    PRISMA_CLIENT_ENGINE_TYPE: 'binary',
+    PRISMA_GENERATE_DATAPROXY: 'false',
+    PRISMA_QUERY_ENGINE_TYPE: 'binary',
+    PRISMA_CLI_QUERY_ENGINE_TYPE: 'binary',
+  };
+
+  for (const [key, value] of Object.entries(overrides)) {
+    const existing = process.env[key];
+    if (existing !== value) {
+      // eslint-disable-next-line no-console
+      console.log(`[DB] Forcing ${key}=${value} (was ${existing ?? 'unset'})`);
+      process.env[key] = value;
+    }
+  }
+}
+
+enforcePrismaBinaryEngines();
 
 /**
  * Validates and normalizes DATABASE_URL for SQLite
