@@ -17,9 +17,16 @@ echo "🌐 Port: $PORT"
 # Create data directory for SQLite if it doesn't exist
 mkdir -p /data
 
-# Generate Prisma client with Railway optimizations
+# Generate Prisma client - MUST be in binary mode (not Data Proxy) for SQLite
 echo "🔧 Generating Prisma client..."
-if ! npx prisma generate --no-engine; then
+# [FIX]: Force binary engine mode and disable Data Proxy before generation
+export PRISMA_CLIENT_ENGINE_TYPE=binary
+export PRISMA_GENERATE_DATAPROXY=false
+export PRISMA_QUERY_ENGINE_TYPE=binary
+export PRISMA_CLI_QUERY_ENGINE_TYPE=binary
+
+# Generate WITHOUT --no-engine flag to ensure proper binary engine generation
+if ! npx prisma generate; then
   echo "⚠️  Prisma client generation failed, continuing..."
 fi
 

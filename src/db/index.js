@@ -7,6 +7,10 @@ import { dirname, resolve } from 'path';
 /**
  * Force Prisma to use local binary engines instead of the Data Proxy.
  * Some environments (Railway) inject PRISMA_* env vars that flip it to `prisma://`.
+ * 
+ * [CRITICAL FIX]: This MUST run BEFORE importing @prisma/client because
+ * the client reads these env vars at import time. If the client was generated
+ * with Data Proxy enabled, we need to ensure runtime doesn't try to use it.
  */
 function enforcePrismaBinaryEngines() {
   const overrides = {
@@ -14,15 +18,24 @@ function enforcePrismaBinaryEngines() {
     PRISMA_GENERATE_DATAPROXY: 'false',
     PRISMA_QUERY_ENGINE_TYPE: 'binary',
     PRISMA_CLI_QUERY_ENGINE_TYPE: 'binary',
+    // Additional flags to ensure Data Proxy is disabled
+    PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING: '1',
   };
 
   for (const [key, value] of Object.entries(overrides)) {
     const existing = process.env[key];
     if (existing !== value) {
-      // eslint-disable-next-line no-console
       console.log(`[DB] Forcing ${key}=${value} (was ${existing ?? 'unset'})`);
       process.env[key] = value;
     }
+  }
+  
+  // [CRITICAL]: Also ensure DATABASE_URL is NOT a prisma:// URL
+  // If it somehow got set to prisma://, that's the root cause
+  if (process.env.DATABASE_URL?.startsWith('prisma://')) {
+    console.error('[DB] ERROR: DATABASE_URL is set to prisma:// but we need file:// for SQLite!');
+    console.error('[DB] Current DATABASE_URL:', process.env.DATABASE_URL);
+    console.error('[DB] This will cause P6001 errors. Please check Railway environment variables.');
   }
 }
 
@@ -274,7 +287,31 @@ export async function getOrCreateUser(discordId) {
 
     return user;
   } catch (error) {
-    logger.error('Failed to get or create user', { discordId, err: error });
+    // [CRITICAL]: Check if this is the P6001 Data Proxy error
+    if (error.code === 'P6001' || (error.message && error.message.includes('prisma://'))) {
+      console.error('═══════════════════════════════════════════════════');
+      console.error('PRISMA DATA PROXY MISCONFIGURATION DETECTED');
+      console.error('═══════════════════════════════════════════════════');
+      console.error('Error Code:', error.code);
+      console.error('Error Message:', error.message);
+      console.error('Current DATABASE_URL:', process.env.DATABASE_URL);
+      console.error('Prisma Client Version:', error.clientVersion);
+      console.error('');
+      console.error('SOLUTION:');
+      console.error('1. Ensure Prisma client is regenerated WITHOUT Data Proxy:');
+      console.error('   Run: npm run prisma:generate');
+      console.error('2. Check Railway environment variables - ensure DATABASE_URL is file://');
+      console.error('3. Verify no PRISMA_* env vars are forcing Data Proxy mode');
+      console.error('═══════════════════════════════════════════════════');
+    }
+    
+    logger.error('Failed to get or create user', { 
+      discordId, 
+      err: error,
+      errorCode: error.code,
+      clientVersion: error.clientVersion,
+      dbUrl: process.env.DATABASE_URL?.startsWith('file:') ? process.env.DATABASE_URL : '[REDACTED]'
+    });
     throw error;
   }
 }
