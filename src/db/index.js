@@ -1,33 +1,94 @@
-// [AI FIX]: Ensure DATABASE_URL is set correctly for SQLite BEFORE any imports
+// [AI FIX]: Comprehensive DATABASE_URL validation and setup BEFORE any imports
 // This must happen before importing logger or Prisma client, as Prisma reads DATABASE_URL at instantiation
 // Prisma SQLite requires DATABASE_URL to start with 'file:' protocol
-const originalDbUrl = process.env.DATABASE_URL;
-if (!process.env.DATABASE_URL || process.env.DATABASE_URL.trim() === '') {
-  // Default to SQLite database in project root for development, or /data for production
-  const defaultDbPath = process.env.NODE_ENV === 'production' 
-    ? 'file:/data/guhdeats.db' 
-    : 'file:./prisma/dev.db';
-  process.env.DATABASE_URL = defaultDbPath;
-  console.log(`[DB] DATABASE_URL not set or empty, using default SQLite database: ${defaultDbPath}`);
-} else if (!process.env.DATABASE_URL.startsWith('file:') && !process.env.DATABASE_URL.startsWith('prisma://')) {
-  // If DATABASE_URL is set but doesn't start with file: or prisma://, assume it's a file path
-  const originalUrl = process.env.DATABASE_URL;
-  const dbPath = process.env.DATABASE_URL.startsWith('/') 
-    ? `file:${process.env.DATABASE_URL}` 
-    : `file:./${process.env.DATABASE_URL}`;
-  process.env.DATABASE_URL = dbPath;
-  console.log(`[DB] DATABASE_URL missing file: protocol, auto-correcting: ${originalUrl} -> ${dbPath}`);
+
+// Import fs and path modules first (these are Node.js built-ins, safe to import)
+import { existsSync, mkdirSync } from 'fs';
+import { dirname, resolve } from 'path';
+
+/**
+ * Validates and normalizes DATABASE_URL for SQLite
+ * Ensures the URL is in the correct format and the directory exists
+ */
+function validateAndSetDatabaseUrl() {
+  let dbUrl = process.env.DATABASE_URL;
+  const originalUrl = dbUrl;
+  
+  // Step 1: Handle empty or whitespace-only URLs
+  if (!dbUrl || (typeof dbUrl === 'string' && dbUrl.trim() === '')) {
+    // Default to SQLite database based on environment
+    const defaultDbPath = process.env.NODE_ENV === 'production' 
+      ? 'file:/data/guhdeats.db' 
+      : 'file:./prisma/dev.db';
+    dbUrl = defaultDbPath;
+    console.log(`[DB] DATABASE_URL not set or empty, using default: ${defaultDbPath}`);
+  }
+  
+  // Step 2: Normalize the URL format
+  // Remove any whitespace
+  dbUrl = dbUrl.trim();
+  
+  // Step 3: Ensure it starts with 'file:' protocol for SQLite
+  if (!dbUrl.startsWith('file:') && !dbUrl.startsWith('prisma://')) {
+    // If it's an absolute path starting with /
+    if (dbUrl.startsWith('/')) {
+      dbUrl = `file:${dbUrl}`;
+    } else {
+      // Relative path - ensure it's properly formatted
+      dbUrl = `file:./${dbUrl.replace(/^\.\//, '')}`;
+    }
+    console.log(`[DB] DATABASE_URL missing file: protocol, auto-correcting: ${originalUrl} -> ${dbUrl}`);
+  }
+  
+  // Step 4: Extract file path and ensure directory exists
+  if (dbUrl.startsWith('file:')) {
+    const filePath = dbUrl.replace(/^file:/, '');
+    let absolutePath;
+    
+    // Resolve to absolute path
+    if (filePath.startsWith('/')) {
+      absolutePath = filePath;
+    } else {
+      // Relative path - resolve from current working directory
+      absolutePath = resolve(process.cwd(), filePath);
+    }
+    
+    // Ensure the directory exists
+    const dbDir = dirname(absolutePath);
+    if (!existsSync(dbDir)) {
+      try {
+        mkdirSync(dbDir, { recursive: true });
+        console.log(`[DB] Created database directory: ${dbDir}`);
+      } catch (error) {
+        console.error(`[DB] Failed to create database directory: ${dbDir}`, error);
+        // Continue anyway - Prisma might create it
+      }
+    }
+    
+    // Reconstruct URL with absolute path for consistency
+    dbUrl = `file:${absolutePath}`;
+  }
+  
+  // Step 5: Set the validated URL
+  process.env.DATABASE_URL = dbUrl;
+  
+  // Step 6: Log final URL (safe for logging)
+  const logUrl = dbUrl.startsWith('file:') ? dbUrl : '[REDACTED]';
+  console.log(`[DB] Using DATABASE_URL: ${logUrl}`);
+  
+  return dbUrl;
 }
 
-// [AI FIX]: Log final DATABASE_URL for debugging (without exposing sensitive data)
-const finalDbUrl = process.env.DATABASE_URL;
-console.log(`[DB] Using DATABASE_URL: ${finalDbUrl.startsWith('file:') ? finalDbUrl : '[REDACTED]'}`);
+// Execute validation immediately
+const validatedDbUrl = validateAndSetDatabaseUrl();
 
+// Now import logger after DATABASE_URL is set
 import { logger } from '../logger.js';
 
 let PrismaClientConstructor = null;
 let prismaInitializationError = null;
 
+// [AI FIX]: Import Prisma client with error handling
 try {
   const pkg = await import('@prisma/client');
   PrismaClientConstructor = pkg?.PrismaClient ?? pkg?.default?.PrismaClient ?? null;
@@ -91,15 +152,48 @@ function createPrismaFallback() {
   );
 }
 
-// [AI FIX]: Pass DATABASE_URL directly to PrismaClient constructor to ensure it's used correctly
+// [AI FIX]: Create Prisma client with explicit datasource URL
 // This ensures the validated DATABASE_URL is used even if environment variable was set incorrectly
-const prisma = PrismaClientConstructor 
-  ? new PrismaClientConstructor({ 
-      datasources: { 
-        db: { url: process.env.DATABASE_URL } 
-      } 
-    }) 
-  : createPrismaFallback();
+let prisma;
+let connectionPromise = null;
+
+try {
+  if (PrismaClientConstructor) {
+    // Pass the validated URL directly to PrismaClient constructor
+    // This overrides any environment variable issues
+    prisma = new PrismaClientConstructor({
+      datasources: {
+        db: {
+          url: validatedDbUrl,
+        },
+      },
+    });
+    
+    // [AI FIX]: Test connection asynchronously but don't block initialization
+    // Connection will be established on first query if this fails
+    connectionPromise = prisma.$connect()
+      .then(() => {
+        logger.info('Prisma database connection established successfully', {
+          dbUrl: validatedDbUrl.startsWith('file:') ? validatedDbUrl : '[REDACTED]'
+        });
+        return true;
+      })
+      .catch((error) => {
+        // Log error but don't throw - connection will be retried on first query
+        logger.error('Prisma database connection failed (will retry on first query)', { 
+          err: error,
+          dbUrl: validatedDbUrl.startsWith('file:') ? validatedDbUrl : '[REDACTED]',
+          message: error.message
+        });
+        return false;
+      });
+  } else {
+    prisma = createPrismaFallback();
+  }
+} catch (error) {
+  logger.error('Failed to initialize Prisma client', { err: error });
+  prisma = createPrismaFallback();
+}
 
 export const prismaStatus = {
   available: Boolean(PrismaClientConstructor),
@@ -124,210 +218,266 @@ export async function initializeDatabase() {
     daily_amount: '1',
   };
 
-  for (const [key, value] of Object.entries(defaultConfig)) {
-    const existing = await prisma.config.findUnique({ where: { key } });
-    if (!existing) {
-      await prisma.config.create({
-        data: { key, value },
-      });
+  try {
+    for (const [key, value] of Object.entries(defaultConfig)) {
+      const existing = await prisma.config.findUnique({ where: { key } });
+      if (!existing) {
+        await prisma.config.create({
+          data: { key, value },
+        });
+      }
     }
+    console.log('✅ Database initialized with default config');
+  } catch (error) {
+    logger.error('Failed to initialize database config', { err: error });
+    throw error;
   }
-
-  console.log('✅ Database initialized with default config');
 }
 
 /**
  * Get or create a user by Discord ID
+ * [AI FIX]: Added error handling for database operations
  */
 export async function getOrCreateUser(discordId) {
-  let user = await prisma.user.findUnique({
-    where: { discordId },
-  });
-
-  if (!user) {
-    user = await prisma.user.create({
-      data: { discordId },
+  try {
+    let user = await prisma.user.findUnique({
+      where: { discordId },
     });
-  }
 
-  return user;
+    if (!user) {
+      user = await prisma.user.create({
+        data: { discordId },
+      });
+    }
+
+    return user;
+  } catch (error) {
+    logger.error('Failed to get or create user', { discordId, err: error });
+    throw error;
+  }
 }
 
 /**
  * Get config value with fallback
  */
 export async function getConfig(key, defaultValue = null) {
-  const config = await prisma.config.findUnique({ where: { key } });
-  return config ? config.value : defaultValue;
+  try {
+    const config = await prisma.config.findUnique({ where: { key } });
+    return config ? config.value : defaultValue;
+  } catch (error) {
+    logger.error('Failed to get config', { key, err: error });
+    return defaultValue;
+  }
 }
 
 /**
  * Set config value
  */
 export async function setConfig(key, value) {
-  await prisma.config.upsert({
-    where: { key },
-    update: { value: value.toString() },
-    create: { key, value: value.toString() },
-  });
+  try {
+    await prisma.config.upsert({
+      where: { key },
+      update: { value: value.toString() },
+      create: { key, value: value.toString() },
+    });
+  } catch (error) {
+    logger.error('Failed to set config', { key, value, err: error });
+    throw error;
+  }
 }
 
 /**
  * Add VP to user with transaction safety
  */
 export async function addVP(discordId, amount, _reason = 'Unknown') {
-  const user = await getOrCreateUser(discordId);
+  try {
+    const user = await getOrCreateUser(discordId);
 
-  if (user.blacklisted) {
-    throw new Error('User is blacklisted');
-  }
+    if (user.blacklisted) {
+      throw new Error('User is blacklisted');
+    }
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      vp: {
-        increment: amount,
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        vp: {
+          increment: amount,
+        },
       },
-    },
-  });
+    });
 
-  return updated;
+    return updated;
+  } catch (error) {
+    logger.error('Failed to add VP', { discordId, amount, err: error });
+    throw error;
+  }
 }
 
 /**
  * Remove VP from user with validation
  */
 export async function removeVP(discordId, amount) {
-  const user = await getOrCreateUser(discordId);
+  try {
+    const user = await getOrCreateUser(discordId);
 
-  if (user.vp < amount) {
-    throw new Error('Insufficient VP balance');
-  }
+    if (user.vp < amount) {
+      throw new Error('Insufficient VP balance');
+    }
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      vp: {
-        decrement: amount,
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        vp: {
+          decrement: amount,
+        },
       },
-    },
-  });
+    });
 
-  return updated;
+    return updated;
+  } catch (error) {
+    logger.error('Failed to remove VP', { discordId, amount, err: error });
+    throw error;
+  }
 }
 
 /**
  * Transfer VP between users
  */
 export async function transferVP(fromDiscordId, toDiscordId, amount, fee) {
-  const fromUser = await getOrCreateUser(fromDiscordId);
-  const toUser = await getOrCreateUser(toDiscordId);
+  try {
+    const fromUser = await getOrCreateUser(fromDiscordId);
+    const toUser = await getOrCreateUser(toDiscordId);
 
-  if (fromUser.blacklisted) {
-    throw new Error('Sender is blacklisted');
+    if (fromUser.blacklisted) {
+      throw new Error('Sender is blacklisted');
+    }
+
+    const totalCost = amount + fee;
+    if (fromUser.vp < totalCost) {
+      throw new Error('Insufficient VP balance');
+    }
+
+    // Use transaction to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // Deduct from sender
+      const updatedFrom = await tx.user.update({
+        where: { id: fromUser.id },
+        data: { vp: { decrement: totalCost } },
+      });
+
+      // Add to recipient
+      const updatedTo = await tx.user.update({
+        where: { id: toUser.id },
+        data: { vp: { increment: amount } },
+      });
+
+      // Create transfer record
+      const transfer = await tx.transfer.create({
+        data: {
+          fromUserId: fromUser.id,
+          toUserId: toUser.id,
+          amount,
+          fee,
+        },
+      });
+
+      return { updatedFrom, updatedTo, transfer };
+    });
+
+    return result;
+  } catch (error) {
+    logger.error('Failed to transfer VP', { fromDiscordId, toDiscordId, amount, fee, err: error });
+    throw error;
   }
-
-  const totalCost = amount + fee;
-  if (fromUser.vp < totalCost) {
-    throw new Error('Insufficient VP balance');
-  }
-
-  // Use transaction to ensure atomicity
-  const result = await prisma.$transaction(async (tx) => {
-    // Deduct from sender
-    const updatedFrom = await tx.user.update({
-      where: { id: fromUser.id },
-      data: { vp: { decrement: totalCost } },
-    });
-
-    // Add to recipient
-    const updatedTo = await tx.user.update({
-      where: { id: toUser.id },
-      data: { vp: { increment: amount } },
-    });
-
-    // Create transfer record
-    const transfer = await tx.transfer.create({
-      data: {
-        fromUserId: fromUser.id,
-        toUserId: toUser.id,
-        amount,
-        fee,
-      },
-    });
-
-    return { updatedFrom, updatedTo, transfer };
-  });
-
-  return result;
 }
 
 /**
  * Check if user has active battle
  */
 export async function hasActiveBattle(discordId) {
-  const user = await getOrCreateUser(discordId);
+  try {
+    const user = await getOrCreateUser(discordId);
 
-  const activeBattle = await prisma.battle.findFirst({
-    where: {
-      OR: [{ challengerId: user.id }, { opponentId: user.id }],
-      status: {
-        in: ['open', 'accepted'],
+    const activeBattle = await prisma.battle.findFirst({
+      where: {
+        OR: [{ challengerId: user.id }, { opponentId: user.id }],
+        status: {
+          in: ['open', 'accepted'],
+        },
       },
-    },
-  });
+    });
 
-  return activeBattle !== null;
+    return activeBattle !== null;
+  } catch (error) {
+    logger.error('Failed to check active battle', { discordId, err: error });
+    return false;
+  }
 }
 
 /**
  * Check if user has active blackjack round
  */
 export async function hasActiveBlackjack(discordId) {
-  const user = await getOrCreateUser(discordId);
+  try {
+    const user = await getOrCreateUser(discordId);
 
-  const activeRound = await prisma.blackjackRound.findFirst({
-    where: {
-      userId: user.id,
-      result: null,
-    },
-  });
+    const activeRound = await prisma.blackjackRound.findFirst({
+      where: {
+        userId: user.id,
+        result: null,
+      },
+    });
 
-  return activeRound !== null;
+    return activeRound !== null;
+  } catch (error) {
+    logger.error('Failed to check active blackjack', { discordId, err: error });
+    return false;
+  }
 }
 
 /**
  * Get leaderboard page
  */
 export async function getLeaderboard(page = 1, perPage = 10) {
-  const skip = (page - 1) * perPage;
+  try {
+    const skip = (page - 1) * perPage;
 
-  const users = await prisma.user.findMany({
-    orderBy: {
-      vp: 'desc',
-    },
-    skip,
-    take: perPage,
-    where: {
-      vp: {
-        gt: 0,
+    const users = await prisma.user.findMany({
+      orderBy: {
+        vp: 'desc',
       },
-    },
-  });
-
-  const totalUsers = await prisma.user.count({
-    where: {
-      vp: {
-        gt: 0,
+      skip,
+      take: perPage,
+      where: {
+        vp: {
+          gt: 0,
+        },
       },
-    },
-  });
+    });
 
-  return {
-    users,
-    page,
-    perPage,
-    totalPages: Math.ceil(totalUsers / perPage),
-    totalUsers,
-  };
+    const totalUsers = await prisma.user.count({
+      where: {
+        vp: {
+          gt: 0,
+        },
+      },
+    });
+
+    return {
+      users,
+      page,
+      perPage,
+      totalPages: Math.ceil(totalUsers / perPage),
+      totalUsers,
+    };
+  } catch (error) {
+    logger.error('Failed to get leaderboard', { page, perPage, err: error });
+    return {
+      users: [],
+      page,
+      perPage,
+      totalPages: 0,
+      totalUsers: 0,
+    };
+  }
 }
