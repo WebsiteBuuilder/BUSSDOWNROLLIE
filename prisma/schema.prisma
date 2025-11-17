@@ -3,9 +3,8 @@
 
 generator client {
   provider = "prisma-client-js"
-  // [FIX]: Explicitly disable Data Proxy / Accelerate - we use direct SQLite connection
-  previewFeatures = []
-  // Ensure we use binary engines, not Data Proxy
+  // [CRITICAL]: No Data Proxy / Accelerate - direct SQLite connection only
+  // Do NOT add engineType, previewFeatures for accelerate, or any Data Proxy config
 }
 
 datasource db {

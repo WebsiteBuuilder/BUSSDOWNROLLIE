@@ -187,39 +187,59 @@ function createPrismaFallback() {
   );
 }
 
-// [AI FIX]: Create Prisma client with explicit datasource URL
-// This ensures the validated DATABASE_URL is used even if environment variable was set incorrectly
+// [CRITICAL FIX]: Create Prisma client WITHOUT datasources override
+// If Prisma client was generated with Data Proxy enabled, passing datasources
+// with a file:// URL will cause P6001 errors. Instead, rely on DATABASE_URL
+// being set correctly in process.env (which we've already validated above).
 let prisma;
 let connectionPromise = null;
 
 try {
   if (PrismaClientConstructor) {
-    // Pass the validated URL directly to PrismaClient constructor
-    // This overrides any environment variable issues
-    prisma = new PrismaClientConstructor({
-      datasources: {
-        db: {
-          url: validatedDbUrl,
-        },
-      },
-    });
+    // [CRITICAL]: Do NOT pass datasources - let PrismaClient read from DATABASE_URL
+    // The validatedDbUrl is already set in process.env.DATABASE_URL above
+    // Passing datasources here can cause conflicts if client was generated for Data Proxy
+    prisma = new PrismaClientConstructor();
     
-    // [AI FIX]: Test connection asynchronously but don't block initialization
-    // Connection will be established on first query if this fails
+    // [CRITICAL FIX]: Test connection with a simple query to verify Prisma is configured correctly
+    // This will catch P6001 errors immediately if client was generated for Data Proxy
     connectionPromise = prisma.$connect()
-      .then(() => {
-        logger.info('Prisma database connection established successfully', {
-          dbUrl: validatedDbUrl.startsWith('file:') ? validatedDbUrl : '[REDACTED]'
-        });
-        return true;
+      .then(async () => {
+        // Test with a simple query to ensure Prisma accepts file:// URLs
+        try {
+          await prisma.$queryRaw`SELECT 1`;
+          logger.info('Prisma database connection established successfully', {
+            dbUrl: validatedDbUrl.startsWith('file:') ? validatedDbUrl : '[REDACTED]'
+          });
+          return true;
+        } catch (queryError) {
+          // If query fails with P6001, the client was generated for Data Proxy
+          if (queryError.code === 'P6001' || (queryError.message && queryError.message.includes('prisma://'))) {
+            console.error('═══════════════════════════════════════════════════');
+            console.error('CRITICAL: Prisma client was generated for Data Proxy!');
+            console.error('═══════════════════════════════════════════════════');
+            console.error('The Prisma client expects prisma:// URLs but DATABASE_URL is file://');
+            console.error('This means prisma generate was run with Data Proxy enabled.');
+            console.error('');
+            console.error('SOLUTION: Regenerate Prisma client WITHOUT Data Proxy:');
+            console.error('   npm run prisma:generate');
+            console.error('   OR on Railway, ensure PRISMA_GENERATE_DATAPROXY=false');
+            console.error('═══════════════════════════════════════════════════');
+            throw queryError;
+          }
+          throw queryError;
+        }
       })
       .catch((error) => {
         // Log error but don't throw - connection will be retried on first query
-        logger.error('Prisma database connection failed (will retry on first query)', { 
-          err: error,
-          dbUrl: validatedDbUrl.startsWith('file:') ? validatedDbUrl : '[REDACTED]',
-          message: error.message
-        });
+        // However, if it's P6001, we've already logged detailed diagnostics above
+        if (error.code !== 'P6001') {
+          logger.error('Prisma database connection failed (will retry on first query)', { 
+            err: error,
+            dbUrl: validatedDbUrl.startsWith('file:') ? validatedDbUrl : '[REDACTED]',
+            message: error.message
+          });
+        }
         return false;
       });
   } else {
@@ -254,6 +274,26 @@ export async function initializeDatabase() {
   };
 
   try {
+    // [CRITICAL]: Test connection first to catch P6001 errors early
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch (testError) {
+      if (testError.code === 'P6001' || (testError.message && testError.message.includes('prisma://'))) {
+        console.error('═══════════════════════════════════════════════════');
+        console.error('CRITICAL: Cannot initialize database - Prisma Data Proxy misconfiguration');
+        console.error('═══════════════════════════════════════════════════');
+        console.error('Error:', testError.message);
+        console.error('DATABASE_URL:', process.env.DATABASE_URL);
+        console.error('');
+        console.error('The Prisma client was generated for Data Proxy but DATABASE_URL is file://');
+        console.error('Regenerate the client: npm run prisma:generate');
+        console.error('═══════════════════════════════════════════════════');
+        throw testError;
+      }
+      // Other connection errors - log but continue
+      logger.warn('Database connection test failed, but continuing initialization', { err: testError });
+    }
+
     for (const [key, value] of Object.entries(defaultConfig)) {
       const existing = await prisma.config.findUnique({ where: { key } });
       if (!existing) {
@@ -264,7 +304,21 @@ export async function initializeDatabase() {
     }
     console.log('✅ Database initialized with default config');
   } catch (error) {
-    logger.error('Failed to initialize database config', { err: error });
+    // [CRITICAL]: Check for P6001 specifically
+    if (error.code === 'P6001' || (error.message && error.message.includes('prisma://'))) {
+      console.error('═══════════════════════════════════════════════════');
+      console.error('PRISMA DATA PROXY ERROR in initializeDatabase');
+      console.error('═══════════════════════════════════════════════════');
+      console.error('Error Code:', error.code);
+      console.error('Error Message:', error.message);
+      console.error('DATABASE_URL:', process.env.DATABASE_URL);
+      console.error('═══════════════════════════════════════════════════');
+    }
+    logger.error('Failed to initialize database config', { 
+      err: error,
+      errorCode: error.code,
+      clientVersion: error.clientVersion
+    });
     throw error;
   }
 }
