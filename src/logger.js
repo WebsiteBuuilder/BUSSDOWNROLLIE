@@ -39,9 +39,28 @@ export const logger = {
     log('warn', message, meta);
   },
   error(message, meta) {
+    // [FIX]: Print full error stack BEFORE serialization to ensure visibility
     if (meta?.err instanceof Error) {
       const { err, ...rest } = meta;
-      log('error', `${message}: ${err.message}`, { ...rest, stack: err.stack });
+      
+      // Print the full error with stack trace directly to console.error
+      // This ensures we see the complete stack, not JSON.stringify'd version
+      console.error(`[ERROR] ${message}: ${err.message}`);
+      console.error('Stack trace:');
+      console.error(err.stack);
+      
+      // Also log with metadata for structured logging
+      const errorInfo = {
+        name: err.name,
+        message: err.message,
+        code: err.code,
+        // Include Prisma-specific properties if they exist
+        clientVersion: err.clientVersion,
+        meta: err.meta,
+        ...rest
+      };
+      
+      log('error', message, errorInfo);
     } else {
       log('error', message, meta);
     }

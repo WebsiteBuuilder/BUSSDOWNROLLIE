@@ -382,16 +382,34 @@ client.on('interactionCreate', async (interaction) => {
           command: interaction.commandName,
           userId: interaction.user?.id,
         });
+        // [FIX]: Reply to user so they know command doesn't exist
+        if (!interaction.replied && !interaction.deferred) {
+          await interaction.reply({
+            content: '❌ Unknown command. The bot may have been recently updated.',
+            flags: MessageFlags.Ephemeral,
+          });
+        }
         return;
       }
 
       try {
         await command.execute(interaction, client);
       } catch (error) {
+        // [FIX]: Print full error details directly to console for debugging
+        console.error('═══════════════════════════════════════════════════');
+        console.error(`COMMAND EXECUTION ERROR: /${interaction.commandName}`);
+        console.error('User:', interaction.user?.tag, `(${interaction.user?.id})`);
+        console.error('Guild:', interaction.guild?.name, `(${interaction.guild?.id})`);
+        console.error('Error:', error);
+        console.error('Stack:', error.stack);
+        console.error('═══════════════════════════════════════════════════');
+        
+        // Also use structured logger
         logger.error(`error executing command ${interaction.commandName}`, {
           err: error,
           command: interaction.commandName,
           userId: interaction.user?.id,
+          guildId: interaction.guild?.id,
         });
 
         const errorMessage = {
@@ -399,10 +417,14 @@ client.on('interactionCreate', async (interaction) => {
           flags: MessageFlags.Ephemeral,
         };
 
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(errorMessage);
-        } else {
-          await interaction.reply(errorMessage);
+        try {
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(errorMessage);
+          } else {
+            await interaction.reply(errorMessage);
+          }
+        } catch (replyError) {
+          console.error('Failed to send error message to user:', replyError);
         }
       }
       return;
@@ -459,18 +481,34 @@ client.on('interactionCreate', async (interaction) => {
       }
     }
   } catch (err) {
+    // [FIX]: Print full error details for top-level interaction errors
+    console.error('═══════════════════════════════════════════════════');
+    console.error('TOP-LEVEL INTERACTION ERROR');
+    console.error('Type:', interaction.type);
+    console.error('Command/CustomId:', interaction.commandName || interaction.customId);
+    console.error('User:', interaction.user?.tag, `(${interaction.user?.id})`);
+    console.error('Error:', err);
+    console.error('Stack:', err.stack);
+    console.error('═══════════════════════════════════════════════════');
+    
     logger.error('interaction error', {
       err,
       type: interaction.type,
       id: interaction.id,
       user: interaction.user?.id,
+      commandName: interaction.commandName,
+      customId: interaction.customId,
     });
 
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        ephemeral: true,
-        content: 'Something went wrong. Try again.',
-      });
+    try {
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          ephemeral: true,
+          content: 'Something went wrong. Try again.',
+        });
+      }
+    } catch (replyError) {
+      console.error('Failed to send error reply:', replyError);
     }
   }
 });
@@ -492,15 +530,34 @@ process.on('SIGTERM', async () => {
 
 // Handle uncaught errors
 process.on('uncaughtException', (error, origin) => {
+  // [FIX]: Print full error to console before logging
+  console.error('═══════════════════════════════════════════════════');
+  console.error('UNCAUGHT EXCEPTION');
+  console.error('Origin:', origin);
+  console.error('Error:', error);
+  console.error('Stack:', error.stack);
+  console.error('═══════════════════════════════════════════════════');
+  
   logger.error('uncaught exception', {
     err: error,
     origin,
   });
+  
+  // Don't exit immediately - log and continue
+  // In production, you may want to gracefully shutdown
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  // [FIX]: Print full error to console before logging
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  console.error('═══════════════════════════════════════════════════');
+  console.error('UNHANDLED PROMISE REJECTION');
+  console.error('Reason:', reason);
+  console.error('Stack:', error.stack);
+  console.error('═══════════════════════════════════════════════════');
+  
   logger.error('unhandled rejection', {
-    err: reason instanceof Error ? reason : new Error(String(reason)),
+    err: error,
     promiseState: promise && typeof promise === 'object' ? promise.constructor?.name : undefined,
   });
 });
