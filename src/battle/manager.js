@@ -368,6 +368,16 @@ function gameSelectRow(battle) {
 }
 
 export async function createDirectBattle(interaction, opponent, amount) {
+  // Check challenger has enough points
+  const challenger = await getOrCreateUser(interaction.user.id);
+  if (challenger.vp < amount) {
+    await interaction.reply({
+      ephemeral: true,
+      content: `❌ You don't have enough points to start this battle. You need ${amount} points, but you only have ${challenger.vp} points.`,
+    });
+    return null;
+  }
+
   const opponentMember = interaction.guild?.members?.cache?.get(opponent.id) ?? null;
   const battle = new BattleState({
     interaction,
@@ -404,6 +414,16 @@ export async function createDirectBattle(interaction, opponent, amount) {
 }
 
 export async function createOpenBattle(interaction, amount) {
+  // Check challenger has enough points
+  const challenger = await getOrCreateUser(interaction.user.id);
+  if (challenger.vp < amount) {
+    await interaction.reply({
+      ephemeral: true,
+      content: `❌ You don't have enough points to start this battle. You need ${amount} points, but you only have ${challenger.vp} points.`,
+    });
+    return null;
+  }
+
   const battle = new BattleState({
     interaction,
     opponent: null,
@@ -446,6 +466,16 @@ async function handleAccept(interaction, battle) {
 
   if (interaction.user.id !== battle.opponentId) {
     await interaction.reply({ ephemeral: true, content: 'Only the challenged opponent can accept.' });
+    return;
+  }
+
+  // Check opponent has enough points
+  const opponent = await getOrCreateUser(interaction.user.id);
+  if (opponent.vp < battle.amount) {
+    await interaction.reply({
+      ephemeral: true,
+      content: `❌ You don't have enough points to accept this battle. You need ${battle.amount} points, but you only have ${opponent.vp} points.`,
+    });
     return;
   }
 
@@ -508,6 +538,16 @@ async function handleJoin(interaction, battle) {
     return;
   }
 
+  // Check user has enough points
+  const user = await getOrCreateUser(interaction.user.id);
+  if (user.vp < battle.amount) {
+    await interaction.reply({
+      ephemeral: true,
+      content: `❌ You don't have enough points to join this battle. You need ${battle.amount} points, but you only have ${user.vp} points.`,
+    });
+    return;
+  }
+
   const confirmId = battle.registerAction({ player: 'p2', action: `join-confirm-${interaction.user.id}` }, async (i, b) => {
     b.clearTimeout(`join-wait-${interaction.user.id}`);
     if (i.user.id !== interaction.user.id) {
@@ -517,6 +557,16 @@ async function handleJoin(interaction, battle) {
 
     if (b.status !== 'open') {
       await i.reply({ ephemeral: true, content: 'The invite is no longer active.' });
+      return;
+    }
+
+    // Re-check balance at confirmation time (race condition protection)
+    const joiningUser = await getOrCreateUser(interaction.user.id);
+    if (joiningUser.vp < b.amount) {
+      await i.reply({
+        ephemeral: true,
+        content: `❌ You don't have enough points to join this battle. You need ${b.amount} points, but you only have ${joiningUser.vp} points.`,
+      });
       return;
     }
 

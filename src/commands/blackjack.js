@@ -308,7 +308,21 @@ async function cancelBlackjack(interaction) {
       );
     }
 
+    // Only the same user who started the game can cancel it
+    if (activeRound.user.discordId !== userId) {
+      return interaction.reply(
+        ephemeral({
+          content: '❌ You can only cancel your own blackjack game.',
+        })
+      );
+    }
+
     clearActiveGame(userId);
+
+    // Calculate half bet (rounded down)
+    const halfBet = Math.floor(activeRound.amount / 2);
+    const forfeitedAmount = halfBet;
+    const refundAmount = activeRound.amount - halfBet;
 
     await prisma.$transaction(async (tx) => {
       await tx.blackjackRound.update({
@@ -318,20 +332,24 @@ async function cancelBlackjack(interaction) {
         },
       });
 
-      await tx.user.update({
-        where: { id: activeRound.userId },
-        data: { vp: { increment: activeRound.amount } },
-      });
+      // Refund half the bet (player loses half)
+      if (refundAmount > 0) {
+        await tx.user.update({
+          where: { id: activeRound.userId },
+          data: { vp: { increment: refundAmount } },
+        });
+      }
     });
 
     logBlackjackEvent('game.cancelled', {
       userId,
       roundId: activeRound.id,
+      forfeitedAmount,
     });
 
     return interaction.reply(
       ephemeral({
-        content: '✅ Your blackjack game was cancelled and your bet was refunded.',
+        content: `✅ Your blackjack game has been cancelled. You forfeited ${formatVP(forfeitedAmount)} (half your bet).`,
       })
     );
   } catch (error) {
@@ -604,18 +622,21 @@ async function resolveGame(interaction, round, gameState, user, options = {}) {
       },
     });
 
-    if (payout > 0) {
-      await tx.user.update({
-        where: { id: user.id },
-        data: { vp: { increment: payout } },
-      });
-    } else if (result === 'push') {
-      // For push, return the bet amount
+    // Handle push: return the full bet (no profit, no loss)
+    if (result === 'push') {
+      // Return the full bet amount (handles both regular and double-down cases)
       await tx.user.update({
         where: { id: user.id },
         data: { vp: { increment: gameState.bet } },
       });
+    } else if (payout > 0) {
+      // Win or blackjack: add payout
+      await tx.user.update({
+        where: { id: user.id },
+        data: { vp: { increment: payout } },
+      });
     }
+    // Lose: payout is 0, no balance change needed (bet already deducted)
   });
 
   const updatedUser = await prisma.user.findUnique({ where: { id: user.id } });

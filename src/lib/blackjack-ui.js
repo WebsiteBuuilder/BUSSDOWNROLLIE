@@ -53,9 +53,10 @@ export function createGameUIEmbed(gameState, user, playerValue, dealerShowingVal
     ? createHandDisplay(gameState.dealerHand, false) // Show all cards if peeked
     : createHandDisplay(gameState.dealerHand, true);  // Hide first card if not peeked
   
+  // Only show dealer total if peeked, otherwise just show the cards without revealing total
   const dealerValueText = hasPeeked 
     ? `**Total:** \`${calculateHandValue(gameState.dealerHand)}\``
-    : `**Showing:** \`${dealerShowingValue}\` (🂠 hidden)`;
+    : `🂠 *Hidden card*`;
 
   const embed = new EmbedBuilder()
     .setColor(0x2f3136) // Discord dark gray
@@ -138,12 +139,16 @@ export function createResultUIEmbed(gameState, user, playerValue, dealerValue, r
       },
       {
         name: '📊 **Game Results**',
-        value: `**Outcome:** ${icon} ${title.replace(/\*\*/g, '')}\n**Bet:** ${formatVP(gameState.bet)}\n**Payout:** ${formatVP(payout)}`,
+        value: result === 'push' 
+          ? `**Outcome:** ${icon} ${title.replace(/\*\*/g, '')}\n**Bet:** ${formatVP(gameState.bet)}\n**Payout:** ${formatVP(payout)} (bet returned)`
+          : `**Outcome:** ${icon} ${title.replace(/\*\*/g, '')}\n**Bet:** ${formatVP(gameState.bet)}\n**Payout:** ${formatVP(payout)}`,
         inline: true
       },
       {
         name: '💳 **Balance**',
-        value: `**Previous:** ${formatVP(user.vp)}\n**New:** ${formatVP(updatedUser.vp)}\n**Change:** ${payout > 0 ? '+' : ''}${formatVP(payout)}`,
+        value: result === 'push'
+          ? `**Previous:** ${formatVP(user.vp)}\n**New:** ${formatVP(updatedUser.vp)}\n**Change:** ±${formatVP(0)} (push - bet returned)`
+          : `**Previous:** ${formatVP(user.vp)}\n**New:** ${formatVP(updatedUser.vp)}\n**Change:** ${payout > 0 ? '+' : ''}${formatVP(payout)}`,
         inline: true
       }
     )
